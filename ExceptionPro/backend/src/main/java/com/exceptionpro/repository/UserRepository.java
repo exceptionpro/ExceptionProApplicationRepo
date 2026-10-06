@@ -27,6 +27,6 @@ public interface UserRepository extends JpaRepository<User, UUID> {
             "OR LOWER(cp.organizationName) LIKE LOWER(CONCAT('%', :search, '%')))")
     List<User> searchUsers(@Param("currentEmail") String currentEmail, @Param("search") String search);
 
-    @Query("SELECT u FROM User u LEFT JOIN FETCH u.individualProfile LEFT JOIN FETCH u.corporateProfile WHERE u.accountType = 'Supplier' OR u.accountType = 'Buyer and Supplier'")
+    @Query("SELECT u FROM User u LEFT JOIN FETCH u.individualProfile LEFT JOIN FETCH u.corporateProfile WHERE LOWER(u.accountType) = 'supplier' OR LOWER(u.accountType) = 'buyer and supplier'")
     List<User> findSuppliers();
 }

@@ -358,7 +358,8 @@ public class RequisitionService {
 
         return acceptedRequests.stream()
                 .map(r -> r.getSender().getId().equals(buyer.getId()) ? r.getReceiver() : r.getSender())
-                .filter(u -> u != null && List.of("Supplier", "Buyer and Supplier").contains(u.getAccountType()))
+                .filter(u -> u != null && u.getAccountType() != null &&
+                        (u.getAccountType().equalsIgnoreCase("Supplier") || u.getAccountType().equalsIgnoreCase("Buyer and Supplier")))
                 .collect(Collectors.toMap(User::getId, u -> u, (u1, u2) -> u1))
                 .values().stream()
                 .map(u -> new SupplierSummaryResponse(
