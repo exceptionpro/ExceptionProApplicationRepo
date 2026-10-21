@@ -11,6 +11,7 @@ interface RequisitionItem {
   quantity: number;
   unitMeasure: string;
   price: number;
+  currencyType?: string;
   supplierId?: string;
   supplierName?: string;
 }
@@ -97,7 +98,7 @@ const RequestNotificationPage: React.FC = () => {
     try {
       const endpoint = `/api/requisitions/${actionModal.reqId}/${actionModal.type.toLowerCase()}`;
       await api.put(endpoint, { comments: actionModal.comment });
-      setSuccess(`Requisition request ${actionModal.type === 'Accept' ? 'accepted' : 'declined'} successfully!`);
+      setSuccess(`Purchase Order ${actionModal.type === 'Accept' ? 'accepted' : 'declined'} successfully!`);
       setActionModal({ open: false, reqId: '', reqTitle: '', type: 'Accept', comment: '' });
       if (viewingReq && viewingReq.id === actionModal.reqId) {
         setViewingReq(null);
@@ -125,7 +126,7 @@ const RequestNotificationPage: React.FC = () => {
       <LeftNavigation activePage="request-notification" />
 
       <main style={{ flex: 1, width: '100%', maxWidth: '100%', display: 'flex', flexDirection: 'column', gap: '2rem' }}>
-        
+
         <div className="glass-card glass-card-lg" style={{ padding: '2rem', width: '100%', maxWidth: 'none' }}>
           <h2 className="card-title" style={{ fontSize: '1.5rem', marginBottom: '0.5rem' }}>Purchase Requests</h2>
           <p className="card-subtitle" style={{ marginBottom: '1.5rem' }}>Review purchase requisition requests submitted by Buyers</p>
@@ -383,8 +384,8 @@ const RequestNotificationPage: React.FC = () => {
                           <td style={{ padding: '0.6rem', color: 'var(--text-secondary)' }}>{item.fullDescription}</td>
                           <td style={{ padding: '0.6rem' }}>{item.quantity}</td>
                           <td style={{ padding: '0.6rem' }}>{item.unitMeasure}</td>
-                          <td style={{ padding: '0.6rem' }}>${Number(item.price || 0).toFixed(2)}</td>
-                          <td style={{ padding: '0.6rem', textAlign: 'right', fontWeight: 600 }}>${itemTotal.toFixed(2)}</td>
+                          <td style={{ padding: '0.6rem' }}>{item.currencyType ? `${item.currencyType} ` : '$'}{Number(item.price || 0).toFixed(2)}</td>
+                          <td style={{ padding: '0.6rem', textAlign: 'right', fontWeight: 600 }}>{item.currencyType ? `${item.currencyType} ` : '$'}{itemTotal.toFixed(2)}</td>
                         </tr>
                       );
                     })}
@@ -445,12 +446,12 @@ const RequestNotificationPage: React.FC = () => {
         <div className="modal-backdrop" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.6)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1100 }}>
           <div className="glass-card" style={{ width: '90%', maxWidth: '550px', padding: '2rem', boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.3)' }}>
             <h3 style={{ margin: '0 0 0.5rem 0', fontSize: '1.25rem', color: actionModal.type === 'Accept' ? '#10b981' : '#ef4444' }}>
-              {actionModal.type === 'Accept' ? 'Accept Requisition Request' : 'Decline Requisition Request'}
+              {actionModal.type === 'Accept' ? 'Accept Purchase Order' : 'Decline Purchase Order'}
             </h3>
             <p style={{ fontSize: '0.875rem', color: 'var(--text-secondary)', marginBottom: '1.25rem' }}>
-              Requisition: <strong style={{ color: 'var(--text-primary)' }}>{actionModal.reqTitle}</strong>
+              Purchase Order: <strong style={{ color: 'var(--text-primary)' }}>{actionModal.reqTitle}</strong>
               <br />
-              Please provide your comments or reason (up to 400 characters). This will be sent to the Buyer's Notifications tab.
+              Please provide your comments or reason (up to 400 characters). This notification will be sent to the specific Buyer who created this Purchase Order.
             </p>
 
             <div style={{ marginBottom: '1.25rem' }}>

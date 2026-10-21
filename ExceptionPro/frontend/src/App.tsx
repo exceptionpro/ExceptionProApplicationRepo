@@ -70,6 +70,12 @@ const AppContent: React.FC = () => {
           </PrivateRoute>
         } />
 
+        <Route path="/requisitions" element={
+          <PrivateRoute>
+            <Requisition />
+          </PrivateRoute>
+        } />
+
         <Route path="/request-notification" element={
           <PrivateRoute>
             <RequestNotification />

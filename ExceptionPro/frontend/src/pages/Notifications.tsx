@@ -51,6 +51,25 @@ const NotificationsPage: React.FC = () => {
     return null;
   };
 
+  const getRequisitionUrl = (item: NotificationItem): string | null => {
+    const cat = (item.category || '').toUpperCase();
+    const title = (item.title || '').toLowerCase();
+    const msg = (item.message || '').toLowerCase();
+    const isReq =
+      cat === 'REQUISITIONS' ||
+      cat === 'REQUISITION' ||
+      item.referenceType === 'REQUISITION' ||
+      title.includes('purchase order') ||
+      title.includes('requisition') ||
+      msg.includes('purchase order');
+    if (!isReq) return null;
+
+    if (item.referenceId) {
+      return `/requisition?reqId=${encodeURIComponent(item.referenceId)}#req-${item.referenceId}`;
+    }
+    return '/requisition';
+  };
+
   useEffect(() => {
     fetchNotifications();
   }, [activeTab]);
@@ -220,13 +239,17 @@ const NotificationsPage: React.FC = () => {
             <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', width: '100%', boxSizing: 'border-box' }}>
               {notifications.map((item) => {
                 const postUrl = getPostUrl(item);
+                const reqUrl = getRequisitionUrl(item);
                 const catUpper = (item.category || '').toUpperCase();
                 const isMyPost = catUpper === 'MY_POST' || catUpper === 'MY_POSTS';
+                const isRequisition = !!reqUrl;
 
                 const handleCardClick = () => {
                   if (!item.isRead) markAsRead(item.id);
                   if (postUrl) {
                     navigate(postUrl);
+                  } else if (reqUrl) {
+                    navigate(reqUrl);
                   }
                 };
 
@@ -244,7 +267,7 @@ const NotificationsPage: React.FC = () => {
                       gap: '0.75rem',
                       transition: 'all 0.2s ease',
                       position: 'relative',
-                      cursor: postUrl || !item.isRead ? 'pointer' : 'default',
+                      cursor: postUrl || isRequisition || !item.isRead ? 'pointer' : 'default',
                       width: '100%',
                       boxSizing: 'border-box',
                     }}
@@ -298,6 +321,28 @@ const NotificationsPage: React.FC = () => {
                             >
                               {item.title}
                             </a>
+                          ) : reqUrl ? (
+                            <a
+                              href={reqUrl}
+                              onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                handleCardClick();
+                              }}
+                              style={{
+                                margin: '0.15rem 0 0 0',
+                                fontSize: '1rem',
+                                fontWeight: 600,
+                                color: 'var(--accent-primary)',
+                                textDecoration: 'none',
+                                cursor: 'pointer',
+                                display: 'inline-block',
+                              }}
+                              onMouseEnter={(e) => (e.currentTarget.style.textDecoration = 'underline')}
+                              onMouseLeave={(e) => (e.currentTarget.style.textDecoration = 'none')}
+                            >
+                              {item.title}
+                            </a>
                           ) : (
                             <h4 style={{ margin: '0.15rem 0 0 0', fontSize: '1rem', fontWeight: 600, color: 'var(--text-primary)' }}>
                               {item.title}
@@ -326,7 +371,7 @@ const NotificationsPage: React.FC = () => {
                     </div>
 
                     {/* Main Message */}
-                    <p style={{ margin: 0, fontSize: '0.9rem', color: 'var(--text-secondary)', lineHeight: '1.45', width: '100%' }}>
+                    <p style={{ margin: 0, fontSize: '0.9rem', color: 'var(--text-secondary)', lineHeight: '1.55', width: '100%', whiteSpace: 'pre-line' }}>
                       {item.message}
                     </p>
 
@@ -362,6 +407,42 @@ const NotificationsPage: React.FC = () => {
                               ? 'View Post in My Profile'
                               : `View Post on ${item.senderName ? `${item.senderName}'s` : 'Business Partner'} Profile`}
                           </span>
+                          <span>&rarr;</span>
+                        </a>
+                      </div>
+                    )}
+
+                    {/* Requisition Link */}
+                    {reqUrl && (
+                      <div style={{ marginTop: '0.25rem' }}>
+                        <a
+                          href={reqUrl}
+                          className="notification-post-link"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            handleCardClick();
+                          }}
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '0.4rem',
+                            color: 'var(--accent-primary)',
+                            fontSize: '0.875rem',
+                            fontWeight: 600,
+                            textDecoration: 'underline',
+                            cursor: 'pointer',
+                            padding: '0.2rem 0',
+                          }}
+                        >
+                          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                            <polyline points="14 2 14 8 20 8"></polyline>
+                            <line x1="16" y1="13" x2="8" y2="13"></line>
+                            <line x1="16" y1="17" x2="8" y2="17"></line>
+                            <polyline points="10 9 9 9 8 9"></polyline>
+                          </svg>
+                          <span>View in Requisitions</span>
                           <span>&rarr;</span>
                         </a>
                       </div>

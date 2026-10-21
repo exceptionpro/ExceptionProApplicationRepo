@@ -15,5 +15,6 @@ public interface NotificationRepository extends JpaRepository<Notification, UUID
     List<Notification> findByRecipientIdAndCategoryInOrderByCreatedAtDesc(UUID recipientId, Collection<String> categories);
     boolean existsByRecipientIdAndReferenceIdAndCategoryInAndTitle(UUID recipientId, UUID referenceId, Collection<String> categories, String title);
     boolean existsByRecipientIdAndReferenceIdAndCategory(UUID recipientId, UUID referenceId, String category);
+    List<Notification> findByRecipientIdAndReferenceIdAndCategory(UUID recipientId, UUID referenceId, String category);
     long countByRecipientIdAndIsReadFalse(UUID recipientId);
 }

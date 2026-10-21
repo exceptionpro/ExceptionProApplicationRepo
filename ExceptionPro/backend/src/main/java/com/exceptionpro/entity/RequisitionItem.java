@@ -1,8 +1,15 @@
 package com.exceptionpro.entity;
 
-import jakarta.persistence.*;
 import java.math.BigDecimal;
 import java.util.UUID;
+
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.FetchType;
+import jakarta.persistence.Id;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.ManyToOne;
+import jakarta.persistence.Table;
 
 @Entity
 @Table(name = "requisition_items")
@@ -35,6 +42,9 @@ public class RequisitionItem {
 
     @Column(nullable = false)
     private BigDecimal price;
+
+    @Column(name = "currency_type")
+    private String currencyType = "USD";
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "supplier_id")
@@ -110,6 +120,14 @@ public class RequisitionItem {
 
     public void setPrice(BigDecimal price) {
         this.price = price;
+    }
+
+    public String getCurrencyType() {
+        return currencyType;
+    }
+
+    public void setCurrencyType(String currencyType) {
+        this.currencyType = currencyType;
     }
 
     public User getSupplier() {

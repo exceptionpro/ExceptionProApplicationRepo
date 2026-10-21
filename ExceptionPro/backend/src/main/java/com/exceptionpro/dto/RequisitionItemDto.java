@@ -12,6 +12,7 @@ public class RequisitionItemDto {
     private Integer quantity;
     private String unitMeasure;
     private BigDecimal price;
+    private String currencyType;
     private UUID supplierId;
     private String supplierName;
 
@@ -20,6 +21,12 @@ public class RequisitionItemDto {
     public RequisitionItemDto(UUID id, String itemType, UUID catalogueId, String productName,
                               String fullDescription, Integer quantity, String unitMeasure,
                               BigDecimal price, UUID supplierId, String supplierName) {
+        this(id, itemType, catalogueId, productName, fullDescription, quantity, unitMeasure, price, "USD", supplierId, supplierName);
+    }
+
+    public RequisitionItemDto(UUID id, String itemType, UUID catalogueId, String productName,
+                              String fullDescription, Integer quantity, String unitMeasure,
+                              BigDecimal price, String currencyType, UUID supplierId, String supplierName) {
         this.id = id;
         this.itemType = itemType;
         this.catalogueId = catalogueId;
@@ -28,6 +35,7 @@ public class RequisitionItemDto {
         this.quantity = quantity;
         this.unitMeasure = unitMeasure;
         this.price = price;
+        this.currencyType = currencyType != null ? currencyType : "USD";
         this.supplierId = supplierId;
         this.supplierName = supplierName;
     }
@@ -94,6 +102,14 @@ public class RequisitionItemDto {
 
     public void setPrice(BigDecimal price) {
         this.price = price;
+    }
+
+    public String getCurrencyType() {
+        return currencyType;
+    }
+
+    public void setCurrencyType(String currencyType) {
+        this.currencyType = currencyType;
     }
 
     public UUID getSupplierId() {

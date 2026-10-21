@@ -1,23 +1,26 @@
 package com.exceptionpro.service;
 
-import com.exceptionpro.dto.NotificationResponse;
-import com.exceptionpro.entity.BusinessPartnerRequest;
-import com.exceptionpro.entity.Notification;
-import com.exceptionpro.entity.User;
-import com.exceptionpro.repository.BusinessPartnerRequestRepository;
-import com.exceptionpro.repository.NotificationRepository;
-import com.exceptionpro.repository.UserRepository;
-import com.exceptionpro.entity.Post;
-import com.exceptionpro.repository.PostRepository;
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
-
 import java.time.LocalDateTime;
-import java.util.Collection;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
+
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import com.exceptionpro.dto.NotificationResponse;
+import com.exceptionpro.entity.BusinessPartnerRequest;
+import com.exceptionpro.entity.Notification;
+import com.exceptionpro.entity.Post;
+import com.exceptionpro.entity.Requisition;
+import com.exceptionpro.entity.RequisitionItem;
+import com.exceptionpro.entity.User;
+import com.exceptionpro.repository.BusinessPartnerRequestRepository;
+import com.exceptionpro.repository.NotificationRepository;
+import com.exceptionpro.repository.PostRepository;
+import com.exceptionpro.repository.RequisitionRepository;
+import com.exceptionpro.repository.UserRepository;
 
 @Service
 @Transactional
@@ -27,15 +30,18 @@ public class NotificationService {
     private final UserRepository userRepository;
     private final BusinessPartnerRequestRepository partnerRequestRepository;
     private final PostRepository postRepository;
+    private final RequisitionRepository requisitionRepository;
 
     public NotificationService(NotificationRepository notificationRepository,
                                UserRepository userRepository,
                                BusinessPartnerRequestRepository partnerRequestRepository,
-                               PostRepository postRepository) {
+                               PostRepository postRepository,
+                               RequisitionRepository requisitionRepository) {
         this.notificationRepository = notificationRepository;
         this.userRepository = userRepository;
         this.partnerRequestRepository = partnerRequestRepository;
         this.postRepository = postRepository;
+        this.requisitionRepository = requisitionRepository;
     }
 
     public Notification createNotification(User recipient, User sender, String category, String title,
@@ -68,6 +74,13 @@ public class NotificationService {
         boolean isAll = (category == null || category.isBlank() || category.equalsIgnoreCase("ALL"));
         boolean isPosts = (category != null && (category.equalsIgnoreCase("POSTS") || category.equalsIgnoreCase("POST")));
         boolean isMyPost = (category != null && (category.equalsIgnoreCase("MY_POST") || category.equalsIgnoreCase("MY_POSTS")));
+        boolean isRequisitions = (category != null && (category.equalsIgnoreCase("REQUISITIONS") || category.equalsIgnoreCase("REQUISITION")));
+
+        // If checking REQUISITIONS or ALL: ensure supplier gets notified of buyer's submitted requisitions and buyer gets notified of supplier's accept/decline actions
+        if (isRequisitions || isAll) {
+            syncSupplierRequisitionNotifications(user);
+            syncBuyerPurchaseOrderNotifications(user);
+        }
 
         // If checking MY_POST or ALL: ensure user's own posts have published notifications
         if (isMyPost || isAll) {
@@ -102,6 +115,234 @@ public class NotificationService {
         return list.stream()
                 .map(this::mapToResponse)
                 .collect(Collectors.toList());
+    }
+
+    public Notification sendOrUpdateBuyerPurchaseOrderNotification(Requisition saved, User supplier, String status) {
+        if (saved == null || saved.getBuyer() == null) {
+            return null;
+        }
+
+        User buyer = saved.getBuyer();
+        String supplierName = getUserDisplayName(supplier);
+        String buyerName = getUserDisplayName(buyer);
+
+        int reqNum = saved.getReqNumber() != null ? saved.getReqNumber() : 1;
+        String poCode = String.format("PO%02d", reqNum);
+
+        String productNames = (saved.getItems() != null && !saved.getItems().isEmpty())
+                ? saved.getItems().stream()
+                        .map(RequisitionItem::getProductName)
+                        .filter(p -> p != null && !p.isBlank())
+                        .distinct()
+                        .collect(Collectors.joining(", "))
+                : (saved.getTitle() != null ? saved.getTitle() : "Product");
+
+        String itemDescriptions = (saved.getItems() != null && !saved.getItems().isEmpty())
+                ? saved.getItems().stream()
+                        .map(RequisitionItem::getFullDescription)
+                        .filter(d -> d != null && !d.isBlank())
+                        .distinct()
+                        .collect(Collectors.joining("; "))
+                : null;
+
+        String description = (itemDescriptions != null && !itemDescriptions.isBlank())
+                ? itemDescriptions
+                : (saved.getTitle() != null && !saved.getTitle().isBlank() ? saved.getTitle() : "-");
+
+        String expectedTitle = "Purchase Order " + status + " (" + poCode + ")";
+        String expectedMsg = "Supplier " + supplierName + " has " + status.toUpperCase() + " Purchase Order " + poCode + ".\n"
+                + "• Purchase Order ID: " + poCode + "\n"
+                + "• Buyer Name: " + buyerName + "\n"
+                + "• Product Name: " + productNames + "\n"
+                + "• Description: " + description + "\n"
+                + "• Status: " + status;
+
+        List<Notification> existingList = notificationRepository.findByRecipientIdAndReferenceIdAndCategory(
+                buyer.getId(), saved.getId(), "REQUISITIONS"
+        );
+
+        Notification notification;
+        if (!existingList.isEmpty()) {
+            notification = existingList.get(0);
+        } else {
+            notification = new Notification();
+            notification.setId(UUID.randomUUID());
+            notification.setRecipient(buyer);
+            notification.setCategory("REQUISITIONS");
+            notification.setReferenceId(saved.getId());
+            notification.setReferenceType("REQUISITION");
+        }
+
+        notification.setSender(supplier);
+        notification.setTitle(expectedTitle);
+        notification.setMessage(expectedMsg);
+        notification.setSupplierComment(saved.getSupplierComment());
+        notification.setRead(false);
+        notification.setCreatedAt(LocalDateTime.now());
+
+        return notificationRepository.save(notification);
+    }
+
+    private void syncBuyerPurchaseOrderNotifications(User buyer) {
+        try {
+            List<String> poStatuses = List.of("Accepted", "Declined");
+            List<Requisition> buyerPOs = requisitionRepository.findByBuyerIdAndStatusInOrderByCreatedAtDesc(buyer.getId(), poStatuses);
+            if (buyerPOs == null || buyerPOs.isEmpty()) {
+                return;
+            }
+
+            for (Requisition r : buyerPOs) {
+                User supplier = r.getSupplier();
+                String supplierName = supplier != null ? getUserDisplayName(supplier) : "Supplier";
+                String buyerName = getUserDisplayName(buyer);
+
+                int reqNum = r.getReqNumber() != null ? r.getReqNumber() : 1;
+                String poCode = String.format("PO%02d", reqNum);
+                String status = r.getStatus();
+
+                String productNames = (r.getItems() != null && !r.getItems().isEmpty())
+                        ? r.getItems().stream()
+                                .map(RequisitionItem::getProductName)
+                                .filter(p -> p != null && !p.isBlank())
+                                .distinct()
+                                .collect(Collectors.joining(", "))
+                        : (r.getTitle() != null ? r.getTitle() : "Product");
+
+                String itemDescriptions = (r.getItems() != null && !r.getItems().isEmpty())
+                        ? r.getItems().stream()
+                                .map(RequisitionItem::getFullDescription)
+                                .filter(d -> d != null && !d.isBlank())
+                                .distinct()
+                                .collect(Collectors.joining("; "))
+                        : null;
+
+                String description = (itemDescriptions != null && !itemDescriptions.isBlank())
+                        ? itemDescriptions
+                        : (r.getTitle() != null && !r.getTitle().isBlank() ? r.getTitle() : "-");
+
+                String expectedTitle = "Purchase Order " + status + " (" + poCode + ")";
+                String expectedMsg = "Supplier " + supplierName + " has " + status.toUpperCase() + " Purchase Order " + poCode + ".\n"
+                        + "• Purchase Order ID: " + poCode + "\n"
+                        + "• Buyer Name: " + buyerName + "\n"
+                        + "• Product Name: " + productNames + "\n"
+                        + "• Description: " + description + "\n"
+                        + "• Status: " + status;
+
+                List<Notification> existingList = notificationRepository.findByRecipientIdAndReferenceIdAndCategory(
+                        buyer.getId(), r.getId(), "REQUISITIONS"
+                );
+
+                boolean exists = existingList.stream()
+                        .anyMatch(n -> n.getTitle() != null && (n.getTitle().contains("Accepted") || n.getTitle().contains("Declined")));
+
+                if (!exists) {
+                    Notification notification = new Notification();
+                    notification.setId(UUID.randomUUID());
+                    notification.setRecipient(buyer);
+                    notification.setSender(supplier);
+                    notification.setCategory("REQUISITIONS");
+                    notification.setTitle(expectedTitle);
+                    notification.setMessage(expectedMsg);
+                    notification.setSupplierComment(r.getSupplierComment());
+                    notification.setReferenceId(r.getId());
+                    notification.setReferenceType("REQUISITION");
+                    notification.setRead(false);
+                    notification.setCreatedAt(r.getCreatedAt() != null ? r.getCreatedAt() : LocalDateTime.now());
+                    notificationRepository.save(notification);
+                } else {
+                    for (Notification n : existingList) {
+                        if (n.getTitle() != null && (n.getTitle().contains("Accepted") || n.getTitle().contains("Declined"))) {
+                            if (n.getMessage() == null || !n.getMessage().contains("Purchase Order ID:") || !n.getMessage().contains("Buyer Name:")) {
+                                n.setTitle(expectedTitle);
+                                n.setMessage(expectedMsg);
+                                n.setSupplierComment(r.getSupplierComment());
+                                notificationRepository.save(n);
+                            }
+                        }
+                    }
+                }
+            }
+        } catch (Exception e) {
+            // Ignore to avoid interrupting user notification retrieval
+        }
+    }
+
+    private void syncSupplierRequisitionNotifications(User user) {
+        try {
+            // Clean up any un-converted PR notifications so supplier only sees converted Purchase Orders
+            List<Notification> reqNotifications = notificationRepository.findByRecipientIdAndCategoryOrderByCreatedAtDesc(user.getId(), "REQUISITIONS");
+            for (Notification n : reqNotifications) {
+                if (n.getTitle() != null && n.getTitle().startsWith("New Requisition Submitted")) {
+                    notificationRepository.delete(n);
+                }
+            }
+
+            // Sync Purchase Orders (requisitions converted to PO, Accepted, or Declined)
+            List<String> poStatuses = List.of("PO", "Accepted", "Declined");
+            List<Requisition> supplierPOs = requisitionRepository.findAllBySupplierIdAndStatusInOrderByCreatedAtDesc(user.getId(), poStatuses);
+            if (supplierPOs == null || supplierPOs.isEmpty()) {
+                return;
+            }
+
+            for (Requisition r : supplierPOs) {
+                User buyer = r.getBuyer();
+                String buyerName = getUserDisplayName(buyer);
+
+                String productNames = (r.getItems() != null && !r.getItems().isEmpty())
+                        ? r.getItems().stream()
+                                .filter(i -> i.getSupplier() == null
+                                        || (i.getSupplier() != null && i.getSupplier().getId().equals(user.getId()))
+                                        || (r.getSupplier() != null && r.getSupplier().getId().equals(user.getId())))
+                                .map(RequisitionItem::getProductName)
+                                .filter(p -> p != null && !p.isBlank())
+                                .distinct()
+                                .collect(Collectors.joining(", "))
+                        : r.getTitle();
+
+                if (productNames == null || productNames.isBlank()) {
+                    productNames = r.getTitle() != null ? r.getTitle() : "Product";
+                }
+
+                int reqNum = r.getReqNumber() != null ? r.getReqNumber() : 1;
+                String poCode = String.format("PO%02d", reqNum);
+                String expectedTitle = "New Purchase Order Submitted (" + poCode + ")";
+                String expectedMsg = "Buyer " + buyerName + " submitted a Purchase Order " + poCode + " for Product: " + productNames + ".";
+
+                List<Notification> existingList = notificationRepository.findByRecipientIdAndReferenceIdAndCategory(
+                        user.getId(), r.getId(), "REQUISITIONS"
+                );
+
+                boolean hasPoNotification = existingList.stream()
+                        .anyMatch(n -> n.getTitle() != null && n.getTitle().startsWith("New Purchase Order Submitted"));
+
+                if (!hasPoNotification) {
+                    Notification notification = new Notification();
+                    notification.setId(UUID.randomUUID());
+                    notification.setRecipient(user);
+                    notification.setSender(buyer);
+                    notification.setCategory("REQUISITIONS");
+                    notification.setTitle(expectedTitle);
+                    notification.setMessage(expectedMsg);
+                    notification.setSupplierComment(r.getComments());
+                    notification.setReferenceId(r.getId());
+                    notification.setReferenceType("REQUISITION");
+                    notification.setRead(false);
+                    notification.setCreatedAt(r.getCreatedAt() != null ? r.getCreatedAt() : LocalDateTime.now());
+                    notificationRepository.save(notification);
+                } else {
+                    for (Notification n : existingList) {
+                        if (n.getTitle() != null && n.getTitle().startsWith("New Purchase Order Submitted")) {
+                            if (n.getMessage() == null || !n.getMessage().contains(buyerName) || !n.getMessage().contains(productNames)) {
+                                n.setMessage(expectedMsg);
+                                notificationRepository.save(n);
+                            }
+                        }
+                    }
+                }
+            }
+        } catch (Exception e) {
+            // Ignore to avoid interrupting user notification retrieval
+        }
     }
 
     private void syncMyPostNotifications(User user) {

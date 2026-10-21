@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useLocation } from 'react-router-dom';
 import LeftNavigation from '../components/LeftNavigation';
 import api from '../services/api';
 
@@ -8,9 +9,10 @@ interface RequisitionItem {
   catalogueId?: string;
   productName: string;
   fullDescription: string;
-  quantity: number;
+  quantity: number | '';
   unitMeasure: string;
   price: number;
+  currencyType?: string;
   supplierId?: string;
   supplierName?: string;
 }
@@ -76,23 +78,51 @@ const RequisitionPage: React.FC = () => {
   const [catalogItems, setCatalogItems] = useState<CatalogueItem[]>([]);
   const [selectedCatalogIds, setSelectedCatalogIds] = useState<string[]>([]);
   const [catalogLoading, setCatalogLoading] = useState(false);
+  const [catalogError, setCatalogError] = useState('');
 
   const [showNonCatalogModal, setShowNonCatalogModal] = useState(false);
   const [nonCatDescription, setNonCatDescription] = useState('');
   const [nonCatProductName, setNonCatProductName] = useState('');
-  const [nonCatQuantity, setNonCatQuantity] = useState<number>(1);
+  const [nonCatQuantity, setNonCatQuantity] = useState<number | ''>('');
   const [nonCatUnitMeasure, setNonCatUnitMeasure] = useState('Each');
-  const [nonCatPrice, setNonCatPrice] = useState<number>(0);
+  const [nonCatPrice, setNonCatPrice] = useState<number | ''>('');
+  const [nonCatCurrencyType, setNonCatCurrencyType] = useState<string>('');
   const [nonCatSupplierId, setNonCatSupplierId] = useState('');
+  const [nonCatError, setNonCatError] = useState('');
 
   // Edit state
   const [editingRequisition, setEditingRequisition] = useState<RequisitionData | null>(null);
   const [viewingItemsReq, setViewingItemsReq] = useState<RequisitionData | null>(null);
 
+  const location = useLocation();
+  const [highlightedReqId, setHighlightedReqId] = useState<string | null>(null);
+
   useEffect(() => {
     fetchRequisitions();
     fetchSuppliers();
   }, []);
+
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const targetReqId = params.get('reqId') || (location.hash ? location.hash.replace('#req-', '') : null);
+    if (targetReqId && requisitions.length > 0) {
+      const found = requisitions.find(
+        (r) =>
+          r.id === targetReqId ||
+          (r.requisitionId && r.requisitionId.toLowerCase() === targetReqId.toLowerCase())
+      );
+      if (found) {
+        setHighlightedReqId(found.id);
+        setViewingItemsReq(found);
+        setTimeout(() => {
+          const el = document.getElementById(`req-${found.id}`);
+          if (el) {
+            el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          }
+        }, 150);
+      }
+    }
+  }, [location.search, location.hash, requisitions]);
 
   const fetchRequisitions = async () => {
     try {
@@ -110,17 +140,63 @@ const RequisitionPage: React.FC = () => {
     try {
       const res = await api.get('/api/requisitions/suppliers');
       setSuppliers(res.data);
-    } catch (err: any) {
+    } catch (err) {
       console.error('Failed to fetch suppliers', err);
     }
   };
 
+  const getCatalogSupplierMismatchMsg = (reqSupId: string, currentModalSupId: string): string => {
+    const reqSup = suppliers.find((s) => s.id === reqSupId);
+    const catSup = suppliers.find((s) => s.id === currentModalSupId);
+
+    const reqLabel = reqSup ? `${reqSup.name} (${reqSup.email})` : reqSupId;
+    const catLabel = catSup ? `${catSup.name} (${catSup.email})` : (currentModalSupId ? currentModalSupId : 'None selected');
+
+    return `The Supplier which was selected in Requisition form should match with Add Catalog page -> Select Supplier.\n\n• Requisition Form Supplier: ${reqLabel}\n• Add Catalog Page Supplier: ${catLabel}\n\nNote: All catalog items in a requisition must be procured from the same supplier ("${reqSup ? reqSup.name : reqLabel}"). Please select "${reqSup ? reqSup.name : reqLabel}" in Add Catalog page to add items.`;
+  };
+
+  const getNonCatSupplierMismatchMsg = (reqSupId: string, currentModalSupId: string): string => {
+    const reqSup = suppliers.find((s) => s.id === reqSupId);
+    const nonCatSup = suppliers.find((s) => s.id === currentModalSupId);
+
+    const reqLabel = reqSup ? `${reqSup.name} (${reqSup.email})` : reqSupId;
+    const nonCatLabel = nonCatSup ? `${nonCatSup.name} (${nonCatSup.email})` : (currentModalSupId ? currentModalSupId : 'None selected');
+
+    return `The Supplier which was selected in Requisition form should match with Add Non-Catalog page -> Select Supplier.\n\n• Requisition Form Supplier: ${reqLabel}\n• Add Non-Catalog Page Supplier: ${nonCatLabel}\n\nNote: All non-catalog items in a requisition must be procured from the same supplier ("${reqSup ? reqSup.name : reqLabel}"). Please select "${reqSup ? reqSup.name : reqLabel}" in Add Non-Catalog page to create items.`;
+  };
+
   const handleOpenCatalogModal = () => {
     setShowCatalogModal(true);
-    const initialSupId = selectedSupplierId || (suppliers.length > 0 ? suppliers[0].id : '');
+    setCatalogError('');
+    const activeSupId = editingRequisition
+      ? (editingRequisition.supplierId || '')
+      : (selectedSupplierId || '');
+
+    const initialSupId = activeSupId || (suppliers.length > 0 ? suppliers[0].id : '');
     setCatalogSupplierId(initialSupId);
     if (initialSupId) {
       loadCatalogForSupplier(initialSupId);
+    } else {
+      setCatalogItems([]);
+    }
+  };
+
+  const handleCatalogSupplierChange = (newSupId: string) => {
+    setCatalogSupplierId(newSupId);
+    const activeSupId = editingRequisition
+      ? (editingRequisition.supplierId || '')
+      : (selectedSupplierId || '');
+
+    if (activeSupId && newSupId !== activeSupId) {
+      setCatalogError(getCatalogSupplierMismatchMsg(activeSupId, newSupId));
+    } else {
+      setCatalogError('');
+    }
+
+    if (newSupId) {
+      loadCatalogForSupplier(newSupId);
+    } else {
+      setCatalogItems([]);
     }
   };
 
@@ -146,17 +222,27 @@ const RequisitionPage: React.FC = () => {
   };
 
   const handleAddSelectedCatalogs = () => {
+    const activeSupId = editingRequisition
+      ? (editingRequisition.supplierId || '')
+      : (selectedSupplierId || '');
+
+    if (activeSupId && catalogSupplierId !== activeSupId) {
+      setCatalogError(getCatalogSupplierMismatchMsg(activeSupId, catalogSupplierId));
+      return;
+    }
+
     const selectedSupplierObj = suppliers.find((s) => s.id === catalogSupplierId);
     const selectedCats = catalogItems.filter((c) => selectedCatalogIds.includes(c.id));
-    
+
     const newReqItems: RequisitionItem[] = selectedCats.map((cat) => ({
       itemType: 'CATALOG',
       catalogueId: cat.id,
       productName: cat.productName,
       fullDescription: cat.description,
-      quantity: 1,
+      quantity: '',
       unitMeasure: 'Each',
       price: cat.price,
+      currencyType: cat.currencyType || 'USD',
       supplierId: catalogSupplierId,
       supplierName: selectedSupplierObj?.name,
     }));
@@ -176,9 +262,19 @@ const RequisitionPage: React.FC = () => {
 
     setShowCatalogModal(false);
     setSelectedCatalogIds([]);
+    setCatalogError('');
   };
 
   const handleCreateNonCatalogItem = () => {
+    const activeSupId = editingRequisition
+      ? (editingRequisition.supplierId || '')
+      : (selectedSupplierId || '');
+
+    if (activeSupId && nonCatSupplierId !== activeSupId) {
+      setNonCatError(getNonCatSupplierMismatchMsg(activeSupId, nonCatSupplierId));
+      return;
+    }
+
     if (!nonCatProductName.trim()) {
       alert('Product Name is required');
       return;
@@ -187,12 +283,24 @@ const RequisitionPage: React.FC = () => {
       alert('Full Description is required');
       return;
     }
-    if (nonCatQuantity <= 0) {
-      alert('Quantity must be greater than 0');
+    if (nonCatQuantity === '' || isNaN(Number(nonCatQuantity)) || Number(nonCatQuantity) <= 0) {
+      alert('Quantity is required and must be greater than 0');
       return;
     }
-    if (nonCatPrice < 0) {
+    if (!nonCatUnitMeasure.trim()) {
+      alert('Unit Measure is required');
+      return;
+    }
+    if (nonCatPrice === '' || isNaN(Number(nonCatPrice))) {
+      alert('Price is required');
+      return;
+    }
+    if (Number(nonCatPrice) < 0) {
       alert('Price cannot be negative');
+      return;
+    }
+    if (!nonCatCurrencyType.trim()) {
+      alert('Currency Type is required');
       return;
     }
 
@@ -200,11 +308,12 @@ const RequisitionPage: React.FC = () => {
 
     const newItem: RequisitionItem = {
       itemType: 'NON_CATALOG',
-      productName: nonCatProductName,
-      fullDescription: nonCatDescription,
+      productName: nonCatProductName.trim(),
+      fullDescription: nonCatDescription.trim(),
       quantity: Number(nonCatQuantity),
-      unitMeasure: nonCatUnitMeasure,
+      unitMeasure: nonCatUnitMeasure.trim(),
       price: Number(nonCatPrice),
+      currencyType: nonCatCurrencyType.trim().toUpperCase(),
       supplierId: nonCatSupplierId || undefined,
       supplierName: supObj?.name,
     };
@@ -225,28 +334,13 @@ const RequisitionPage: React.FC = () => {
     // Reset non-catalog form & close modal
     setNonCatProductName('');
     setNonCatDescription('');
-    setNonCatQuantity(1);
+    setNonCatQuantity('');
     setNonCatUnitMeasure('Each');
-    setNonCatPrice(0);
+    setNonCatPrice('');
+    setNonCatCurrencyType('');
     setNonCatSupplierId('');
+    setNonCatError('');
     setShowNonCatalogModal(false);
-  };
-
-  const handleRemoveItem = (index: number) => {
-    setItems(items.filter((_, i) => i !== index));
-  };
-
-  const handleUpdateItemQuantity = (index: number, qty: number) => {
-    const updated = [...items];
-    updated[index] = { ...updated[index], quantity: Math.max(1, qty) };
-    setItems(updated);
-  };
-
-  const handleUpdateEditingItemQuantity = (index: number, qty: number) => {
-    if (!editingRequisition) return;
-    const updatedItems = [...(editingRequisition.items || [])];
-    updatedItems[index] = { ...updatedItems[index], quantity: Math.max(1, qty) };
-    setEditingRequisition({ ...editingRequisition, items: updatedItems });
   };
 
   const handleOpenNonCatalogModal = () => {
@@ -254,7 +348,44 @@ const RequisitionPage: React.FC = () => {
       ? (editingRequisition.supplierId || '')
       : (selectedSupplierId || '');
     setNonCatSupplierId(initialSupId);
+    setNonCatError('');
+    setNonCatProductName('');
+    setNonCatDescription('');
+    setNonCatQuantity('');
+    setNonCatUnitMeasure('Each');
+    setNonCatPrice('');
+    setNonCatCurrencyType('');
     setShowNonCatalogModal(true);
+  };
+
+  const handleNonCatSupplierChange = (newSupId: string) => {
+    setNonCatSupplierId(newSupId);
+    const activeSupId = editingRequisition
+      ? (editingRequisition.supplierId || '')
+      : (selectedSupplierId || '');
+
+    if (activeSupId && newSupId !== activeSupId) {
+      setNonCatError(getNonCatSupplierMismatchMsg(activeSupId, newSupId));
+    } else {
+      setNonCatError('');
+    }
+  };
+
+  const handleRemoveItem = (index: number) => {
+    setItems(items.filter((_, i) => i !== index));
+  };
+
+  const handleUpdateItemQuantity = (index: number, qty: number | '') => {
+    const updated = [...items];
+    updated[index] = { ...updated[index], quantity: qty };
+    setItems(updated);
+  };
+
+  const handleUpdateEditingItemQuantity = (index: number, qty: number | '') => {
+    if (!editingRequisition) return;
+    const updatedItems = [...(editingRequisition.items || [])];
+    updatedItems[index] = { ...updatedItems[index], quantity: qty };
+    setEditingRequisition({ ...editingRequisition, items: updatedItems });
   };
 
   const handleUpdateItemPrice = (index: number, price: number) => {
@@ -298,6 +429,16 @@ const RequisitionPage: React.FC = () => {
       return;
     }
 
+    if (items.some((i) => i.quantity === '' || isNaN(Number(i.quantity)) || Number(i.quantity) <= 0)) {
+      setError('Please enter a valid quantity (> 0) for all items');
+      return;
+    }
+
+    if (selectedSupplierId && items.some((i) => i.supplierId && i.supplierId !== selectedSupplierId)) {
+      setError('The Supplier which was selected in Requisition form should match with item Supplier.');
+      return;
+    }
+
     try {
       const payload = {
         title,
@@ -306,7 +447,10 @@ const RequisitionPage: React.FC = () => {
         needByDate,
         comments,
         supplierId: selectedSupplierId || (items.find((i) => i.supplierId)?.supplierId || null),
-        items,
+        items: items.map((i) => ({
+          ...i,
+          quantity: Number(i.quantity),
+        })),
       };
 
       await api.post('/api/requisitions', payload);
@@ -346,6 +490,16 @@ const RequisitionPage: React.FC = () => {
     e.preventDefault();
     if (!editingRequisition) return;
 
+    if (editingRequisition.items && editingRequisition.items.some((i) => i.quantity === '' || isNaN(Number(i.quantity)) || Number(i.quantity) <= 0)) {
+      setError('Please enter a valid quantity (> 0) for all items');
+      return;
+    }
+
+    if (editingRequisition.supplierId && (editingRequisition.items || []).some((i) => i.supplierId && i.supplierId !== editingRequisition.supplierId)) {
+      setError('The Supplier which was selected in Requisition form should match with item Supplier.');
+      return;
+    }
+
     try {
       const payload = {
         title: editingRequisition.title,
@@ -354,7 +508,10 @@ const RequisitionPage: React.FC = () => {
         needByDate: editingRequisition.needByDate,
         comments: editingRequisition.comments,
         supplierId: editingRequisition.supplierId,
-        items: editingRequisition.items,
+        items: (editingRequisition.items || []).map((i) => ({
+          ...i,
+          quantity: Number(i.quantity),
+        })),
       };
 
       await api.put(`/api/requisitions/${editingRequisition.id}`, payload);
@@ -396,7 +553,7 @@ const RequisitionPage: React.FC = () => {
       <LeftNavigation activePage="requisition" />
 
       <main className="feed-center-column" style={{ flex: 1, maxWidth: '900px', display: 'flex', flexDirection: 'column', gap: '2rem' }}>
-        
+
         {/* SECTION 1: CREATE REQUISITION */}
         <div className="glass-card glass-card-lg" style={{ padding: '2rem' }}>
           <h2 className="card-title" style={{ fontSize: '1.5rem', marginBottom: '0.5rem' }}>Create Requisition</h2>
@@ -420,12 +577,20 @@ const RequisitionPage: React.FC = () => {
               </div>
 
               <div className="form-group half-width">
-                <label className="form-label">Supplier Selection</label>
+                <label className="form-label">Select Supplier</label>
                 <select
                   className="form-input"
                   style={{ appearance: 'auto', background: 'var(--bg-secondary)', color: 'var(--text-primary)' }}
                   value={selectedSupplierId}
-                  onChange={(e) => setSelectedSupplierId(e.target.value)}
+                  onChange={(e) => {
+                    const newSupId = e.target.value;
+                    setSelectedSupplierId(newSupId);
+                    if (newSupId && items.some((item) => item.supplierId && item.supplierId !== newSupId)) {
+                      setError('The Supplier which was selected in Requisition form should match with item Supplier. Please ensure all items belong to the selected supplier.');
+                    } else {
+                      setError('');
+                    }
+                  }}
                 >
                   <option value="">-- Select Supplier --</option>
                   {suppliers.map((sup) => (
@@ -538,15 +703,16 @@ const RequisitionPage: React.FC = () => {
                             min="1"
                             className="form-input"
                             style={{ width: '80px', padding: '0.25rem 0.5rem' }}
+                            placeholder="Qty"
                             value={item.quantity}
-                            onChange={(e) => handleUpdateItemQuantity(idx, Number(e.target.value))}
+                            onChange={(e) => handleUpdateItemQuantity(idx, e.target.value === '' ? '' : Number(e.target.value))}
                           />
                         </td>
                         <td style={{ padding: '0.5rem' }}>{item.unitMeasure}</td>
                         <td style={{ padding: '0.5rem' }}>
                           {item.itemType === 'NON_CATALOG' ? (
                             <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
-                              <span>$</span>
+                              <span>{item.currencyType ? `${item.currencyType} ` : '$'}</span>
                               <input
                                 type="number"
                                 step="0.01"
@@ -558,7 +724,7 @@ const RequisitionPage: React.FC = () => {
                               />
                             </div>
                           ) : (
-                            `$${item.price}`
+                            `${item.currencyType ? `${item.currencyType} ` : '$'}${item.price}`
                           )}
                         </td>
                         <td style={{ padding: '0.5rem' }}>{item.supplierName || 'N/A'}</td>
@@ -600,15 +766,17 @@ const RequisitionPage: React.FC = () => {
               {requisitions.map((req) => (
                 <div
                   key={req.id}
+                  id={`req-${req.id}`}
                   style={{
-                    background: 'var(--bg-secondary)',
-                    border: '1px solid var(--border-color)',
+                    background: req.id === highlightedReqId ? 'rgba(59, 130, 246, 0.08)' : 'var(--bg-secondary)',
+                    border: req.id === highlightedReqId ? '2px solid var(--accent-primary)' : '1px solid var(--border-color)',
                     borderRadius: '12px',
                     padding: '1.5rem',
                     display: 'flex',
                     flexDirection: 'column',
                     gap: '1rem',
-                    boxShadow: 'var(--shadow-sm)',
+                    boxShadow: req.id === highlightedReqId ? '0 0 20px rgba(59, 130, 246, 0.35)' : 'var(--shadow-sm)',
+                    transition: 'all 0.3s ease',
                   }}
                 >
                   {/* Requisition Header with Requisition ID, Title & Status */}
@@ -622,9 +790,16 @@ const RequisitionPage: React.FC = () => {
                     }}
                   >
                     <div>
-                      <span style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--accent-primary)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                        Requisition Id: {req.requisitionId || (req.status === 'PO' ? 'PO' : 'PR')}
-                      </span>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+                        <span style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--accent-primary)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                          Requisition Id: {req.requisitionId || (req.status === 'PO' ? 'PO' : 'PR')}
+                        </span>
+                        {req.id === highlightedReqId && (
+                          <span style={{ fontSize: '0.75rem', fontWeight: 700, padding: '0.15rem 0.5rem', borderRadius: '4px', background: 'var(--accent-gradient)', color: '#fff' }}>
+                            Selected Purchase Order
+                          </span>
+                        )}
+                      </div>
                       <h3 style={{ fontSize: '1.15rem', fontWeight: 700, margin: '0.2rem 0 0 0', color: 'var(--text-primary)' }}>
                         {req.title}
                       </h3>
@@ -801,17 +976,39 @@ const RequisitionPage: React.FC = () => {
         <div className="modal-backdrop" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.6)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000 }}>
           <div className="glass-card" style={{ width: '90%', maxWidth: '650px', padding: '2rem', maxHeight: '85vh', overflowY: 'auto' }}>
             <h3 className="card-title" style={{ marginBottom: '1rem' }}>Browse Supplier Catalog</h3>
-            
+
+            {catalogError && (
+              <div
+                className="alert-error"
+                style={{
+                  marginBottom: '1.25rem',
+                  padding: '1rem 1.25rem',
+                  borderRadius: '8px',
+                  fontSize: '0.875rem',
+                  textAlign: 'left',
+                  lineHeight: '1.55',
+                  display: 'flex',
+                  gap: '0.75rem',
+                  alignItems: 'flex-start',
+                }}
+              >
+                <span style={{ fontSize: '1.35rem', lineHeight: '1.2' }}>⚠️</span>
+                <div style={{ flex: 1, whiteSpace: 'pre-line' }}>{catalogError}</div>
+              </div>
+            )}
+
             <div className="form-group" style={{ marginBottom: '1rem' }}>
               <label className="form-label">Select Supplier</label>
               <select
                 className="form-input"
-                style={{ appearance: 'auto', background: 'var(--bg-secondary)', color: 'var(--text-primary)' }}
-                value={catalogSupplierId}
-                onChange={(e) => {
-                  setCatalogSupplierId(e.target.value);
-                  loadCatalogForSupplier(e.target.value);
+                style={{
+                  appearance: 'auto',
+                  background: 'var(--bg-secondary)',
+                  color: 'var(--text-primary)',
+                  borderColor: catalogError ? '#ef4444' : undefined,
                 }}
+                value={catalogSupplierId}
+                onChange={(e) => handleCatalogSupplierChange(e.target.value)}
               >
                 <option value="">-- Select Supplier --</option>
                 {suppliers.map((sup) => (
@@ -866,6 +1063,7 @@ const RequisitionPage: React.FC = () => {
                 onClick={() => {
                   setShowCatalogModal(false);
                   setSelectedCatalogIds([]);
+                  setCatalogError('');
                 }}
               >
                 Cancel
@@ -873,7 +1071,7 @@ const RequisitionPage: React.FC = () => {
               <button
                 type="button"
                 className="btn btn-primary"
-                disabled={selectedCatalogIds.length === 0}
+                disabled={selectedCatalogIds.length === 0 || (!!(editingRequisition ? editingRequisition.supplierId : selectedSupplierId) && catalogSupplierId !== (editingRequisition ? editingRequisition.supplierId : selectedSupplierId))}
                 onClick={handleAddSelectedCatalogs}
               >
                 Add Selected ({selectedCatalogIds.length})
@@ -888,6 +1086,26 @@ const RequisitionPage: React.FC = () => {
         <div className="modal-backdrop" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.6)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000 }}>
           <div className="glass-card" style={{ width: '90%', maxWidth: '600px', padding: '2rem', maxHeight: '85vh', overflowY: 'auto' }}>
             <h3 className="card-title" style={{ marginBottom: '1.25rem' }}>Create Non-Catalog Item</h3>
+
+            {nonCatError && (
+              <div
+                className="alert-error"
+                style={{
+                  marginBottom: '1.25rem',
+                  padding: '1rem 1.25rem',
+                  borderRadius: '8px',
+                  fontSize: '0.875rem',
+                  textAlign: 'left',
+                  lineHeight: '1.55',
+                  display: 'flex',
+                  gap: '0.75rem',
+                  alignItems: 'flex-start',
+                }}
+              >
+                <span style={{ fontSize: '1.35rem', lineHeight: '1.2' }}>⚠️</span>
+                <div style={{ flex: 1, whiteSpace: 'pre-line' }}>{nonCatError}</div>
+              </div>
+            )}
 
             <div className="form-group" style={{ marginBottom: '1rem' }}>
               <label className="form-label">Product Name *</label>
@@ -918,8 +1136,10 @@ const RequisitionPage: React.FC = () => {
                   type="number"
                   min="1"
                   className="form-input"
+                  placeholder="Enter quantity"
                   value={nonCatQuantity}
-                  onChange={(e) => setNonCatQuantity(Number(e.target.value))}
+                  onChange={(e) => setNonCatQuantity(e.target.value === '' ? '' : Number(e.target.value))}
+                  required
                 />
               </div>
 
@@ -931,6 +1151,7 @@ const RequisitionPage: React.FC = () => {
                   placeholder="e.g. Each, Box, Kg, Hours"
                   value={nonCatUnitMeasure}
                   onChange={(e) => setNonCatUnitMeasure(e.target.value)}
+                  required
                 />
               </div>
             </div>
@@ -943,41 +1164,70 @@ const RequisitionPage: React.FC = () => {
                   step="0.01"
                   min="0"
                   className="form-input"
-                  placeholder="0.00"
+                  placeholder="Enter price"
                   value={nonCatPrice}
-                  onChange={(e) => setNonCatPrice(Number(e.target.value))}
+                  onChange={(e) => setNonCatPrice(e.target.value === '' ? '' : Number(e.target.value))}
+                  required
                 />
               </div>
 
               <div className="form-group half-width">
-                <label className="form-label">Selection of Supplier</label>
-                <select
+                <label className="form-label">Currency Type *</label>
+                <input
+                  type="text"
                   className="form-input"
-                  style={{ appearance: 'auto', background: 'var(--bg-secondary)', color: 'var(--text-primary)' }}
-                  value={nonCatSupplierId}
-                  onChange={(e) => setNonCatSupplierId(e.target.value)}
-                >
-                  <option value="">-- Select Supplier --</option>
-                  {suppliers.map((sup) => (
-                    <option key={sup.id} value={sup.id}>
-                      {sup.name} ({sup.email})
-                    </option>
-                  ))}
-                </select>
+                  placeholder="e.g. USD, EUR, INR"
+                  value={nonCatCurrencyType}
+                  onChange={(e) => setNonCatCurrencyType(e.target.value)}
+                  required
+                />
               </div>
+            </div>
+
+            <div className="form-group" style={{ marginBottom: '1rem' }}>
+              <label className="form-label">Select Supplier</label>
+              <select
+                className="form-input"
+                style={{
+                  appearance: 'auto',
+                  background: 'var(--bg-secondary)',
+                  color: 'var(--text-primary)',
+                  borderColor: nonCatError ? '#ef4444' : undefined,
+                }}
+                value={nonCatSupplierId}
+                onChange={(e) => handleNonCatSupplierChange(e.target.value)}
+              >
+                <option value="">-- Select Supplier --</option>
+                {suppliers.map((sup) => (
+                  <option key={sup.id} value={sup.id}>
+                    {sup.name} ({sup.email})
+                  </option>
+                ))}
+              </select>
             </div>
 
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '1rem', marginTop: '1.5rem' }}>
               <button
                 type="button"
                 className="btn btn-secondary"
-                onClick={() => setShowNonCatalogModal(false)}
+                onClick={() => {
+                  setNonCatProductName('');
+                  setNonCatDescription('');
+                  setNonCatQuantity('');
+                  setNonCatUnitMeasure('Each');
+                  setNonCatPrice('');
+                  setNonCatCurrencyType('');
+                  setNonCatSupplierId('');
+                  setNonCatError('');
+                  setShowNonCatalogModal(false);
+                }}
               >
                 Cancel
               </button>
               <button
                 type="button"
                 className="btn btn-primary"
+                disabled={!!(editingRequisition ? editingRequisition.supplierId : selectedSupplierId) && nonCatSupplierId !== (editingRequisition ? editingRequisition.supplierId : selectedSupplierId)}
                 onClick={handleCreateNonCatalogItem}
               >
                 Create
@@ -992,7 +1242,7 @@ const RequisitionPage: React.FC = () => {
         <div className="modal-backdrop" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.6)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000 }}>
           <div className="glass-card" style={{ width: '90%', maxWidth: '750px', padding: '2rem', maxHeight: '85vh', overflowY: 'auto' }}>
             <h3 className="card-title" style={{ marginBottom: '1.25rem' }}>Edit Requisition</h3>
-            
+
             <form onSubmit={handleUpdateRequisition}>
               <div className="form-row">
                 <div className="form-group half-width">
@@ -1007,12 +1257,20 @@ const RequisitionPage: React.FC = () => {
                 </div>
 
                 <div className="form-group half-width">
-                  <label className="form-label">Supplier Selection</label>
+                  <label className="form-label">Select Supplier</label>
                   <select
                     className="form-input"
                     style={{ appearance: 'auto', background: 'var(--bg-secondary)', color: 'var(--text-primary)' }}
                     value={editingRequisition.supplierId || ''}
-                    onChange={(e) => setEditingRequisition({ ...editingRequisition, supplierId: e.target.value })}
+                    onChange={(e) => {
+                      const newSupId = e.target.value;
+                      setEditingRequisition({ ...editingRequisition, supplierId: newSupId });
+                      if (newSupId && (editingRequisition.items || []).some((item) => item.supplierId && item.supplierId !== newSupId)) {
+                        setError('The Supplier which was selected in Requisition form should match with item Supplier. Please ensure all items belong to the selected supplier.');
+                      } else {
+                        setError('');
+                      }
+                    }}
                   >
                     <option value="">-- Select Supplier --</option>
                     {suppliers.map((sup) => (
@@ -1123,15 +1381,16 @@ const RequisitionPage: React.FC = () => {
                                 min="1"
                                 className="form-input"
                                 style={{ width: '70px', padding: '0.25rem 0.4rem' }}
+                                placeholder="Qty"
                                 value={item.quantity}
-                                onChange={(e) => handleUpdateEditingItemQuantity(idx, Number(e.target.value))}
+                                onChange={(e) => handleUpdateEditingItemQuantity(idx, e.target.value === '' ? '' : Number(e.target.value))}
                               />
                             </td>
                             <td style={{ padding: '0.5rem' }}>{item.unitMeasure}</td>
                             <td style={{ padding: '0.5rem' }}>
                               {item.itemType === 'NON_CATALOG' ? (
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.2rem' }}>
-                                  <span>$</span>
+                                  <span>{item.currencyType ? `${item.currencyType} ` : '$'}</span>
                                   <input
                                     type="number"
                                     step="0.01"
@@ -1143,7 +1402,7 @@ const RequisitionPage: React.FC = () => {
                                   />
                                 </div>
                               ) : (
-                                `$${item.price}`
+                                `${item.currencyType ? `${item.currencyType} ` : '$'}${item.price}`
                               )}
                             </td>
                             <td style={{ padding: '0.5rem' }}>
@@ -1188,7 +1447,17 @@ const RequisitionPage: React.FC = () => {
       {viewingItemsReq && (
         <div className="modal-backdrop" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.6)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000 }}>
           <div className="glass-card" style={{ width: '90%', maxWidth: '650px', padding: '2rem', maxHeight: '85vh', overflowY: 'auto' }}>
-            <h3 className="card-title" style={{ marginBottom: '0.5rem' }}>Items for "{viewingItemsReq.title}"</h3>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.5rem' }}>
+              <div>
+                <h3 className="card-title" style={{ marginBottom: '0.25rem' }}>
+                  {viewingItemsReq.requisitionId ? `Purchase Order: ${viewingItemsReq.requisitionId}` : `Requisition: ${viewingItemsReq.title}`}
+                </h3>
+                <div style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', fontWeight: 500 }}>
+                  {viewingItemsReq.title}
+                </div>
+              </div>
+              <div>{getStatusBadge(viewingItemsReq.status)}</div>
+            </div>
             <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '1rem' }}>
               Supplier: {viewingItemsReq.supplierName || 'Not Assigned'}
             </p>
@@ -1228,7 +1497,7 @@ const RequisitionPage: React.FC = () => {
                       <td style={{ padding: '0.5rem' }}>{item.fullDescription}</td>
                       <td style={{ padding: '0.5rem' }}>{item.quantity}</td>
                       <td style={{ padding: '0.5rem' }}>{item.unitMeasure}</td>
-                      <td style={{ padding: '0.5rem' }}>${item.price}</td>
+                      <td style={{ padding: '0.5rem' }}>{item.currencyType ? `${item.currencyType} ` : '$'}{item.price}</td>
                     </tr>
                   ))}
                 </tbody>
