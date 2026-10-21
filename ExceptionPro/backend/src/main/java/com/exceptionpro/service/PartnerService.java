@@ -208,9 +208,11 @@ public class PartnerService {
     }
 
     public PartnerSearchResponse getUserProfileAndStatus(String currentUserEmail, String targetEmail) {
-        User currentUser = userRepository.findByEmail(currentUserEmail)
+        User currentUser = userRepository.findByEmailIgnoreCase(currentUserEmail)
+                .or(() -> userRepository.findByEmail(currentUserEmail))
                 .orElseThrow(() -> new IllegalArgumentException("Current user not found"));
-        User targetUser = userRepository.findByEmail(targetEmail)
+        User targetUser = userRepository.findByEmailIgnoreCase(targetEmail)
+                .or(() -> userRepository.findByEmail(targetEmail))
                 .orElseThrow(() -> new IllegalArgumentException("Target user not found"));
 
         Optional<BusinessPartnerRequest> requestOpt = requestRepository.findBetweenUsers(currentUser.getId(), targetUser.getId());

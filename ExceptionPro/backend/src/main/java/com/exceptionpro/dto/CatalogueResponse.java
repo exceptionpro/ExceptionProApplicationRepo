@@ -9,6 +9,7 @@ public class CatalogueResponse {
     private String productName;
     private String productType;
     private BigDecimal price;
+    private String currencyType;
     private String description;
     private String imageUrl;
     private UUID userId;
@@ -17,10 +18,15 @@ public class CatalogueResponse {
     public CatalogueResponse() {}
 
     public CatalogueResponse(UUID id, String productName, String productType, BigDecimal price, String description, String imageUrl, UUID userId, LocalDateTime createdAt) {
+        this(id, productName, productType, price, "USD", description, imageUrl, userId, createdAt);
+    }
+
+    public CatalogueResponse(UUID id, String productName, String productType, BigDecimal price, String currencyType, String description, String imageUrl, UUID userId, LocalDateTime createdAt) {
         this.id = id;
         this.productName = productName;
         this.productType = productType;
         this.price = price;
+        this.currencyType = currencyType;
         this.description = description;
         this.imageUrl = imageUrl;
         this.userId = userId;
@@ -57,6 +63,14 @@ public class CatalogueResponse {
 
     public void setPrice(BigDecimal price) {
         this.price = price;
+    }
+
+    public String getCurrencyType() {
+        return currencyType;
+    }
+
+    public void setCurrencyType(String currencyType) {
+        this.currencyType = currencyType;
     }
 
     public String getDescription() {

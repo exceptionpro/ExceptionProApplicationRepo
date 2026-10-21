@@ -25,6 +25,9 @@ public class Catalogue {
     @Column(nullable = false)
     private BigDecimal price;
 
+    @Column(name = "currency_type")
+    private String currencyType = "USD";
+
     @Column(columnDefinition = "TEXT", nullable = false)
     private String description;
 
@@ -72,6 +75,14 @@ public class Catalogue {
 
     public void setPrice(BigDecimal price) {
         this.price = price;
+    }
+
+    public String getCurrencyType() {
+        return currencyType;
+    }
+
+    public void setCurrencyType(String currencyType) {
+        this.currencyType = currencyType;
     }
 
     public String getDescription() {

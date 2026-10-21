@@ -48,6 +48,7 @@ interface CatalogueItem {
   productName: string;
   productType: string;
   price: number;
+  currencyType?: string;
   description: string;
   imageUrl?: string;
   userId: string;

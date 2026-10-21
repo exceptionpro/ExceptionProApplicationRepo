@@ -680,8 +680,25 @@ const Profile: React.FC = () => {
     try {
       const response = await api.get('/api/posts');
       const allPosts: PostData[] = response.data;
-      // Filter strictly by current user email or name matching
-      const userPosts = allPosts.filter(p => p.userEmail === user?.email || p.userName.toLowerCase() === user?.email?.toLowerCase() || p.userId === user?.email);
+      const params = new URLSearchParams(location.search);
+      const targetPostId = params.get('postId') || (location.hash ? location.hash.replace('#post-', '') : null);
+
+      const myEmail = (user?.email || '').toLowerCase().trim();
+      // Filter strictly by current user email or name matching (case-insensitive)
+      const userPosts = allPosts.filter(p => 
+        (p.userEmail && p.userEmail.toLowerCase().trim() === myEmail) ||
+        (p.userName && p.userName.toLowerCase().trim() === myEmail) ||
+        (p.userId && p.userId.toLowerCase().trim() === myEmail)
+      );
+
+      // Ensure target post from notification hyperlink is included
+      if (targetPostId) {
+        const foundTarget = allPosts.find(p => p.id === targetPostId);
+        if (foundTarget && !userPosts.some(p => p.id === targetPostId)) {
+          userPosts.unshift(foundTarget);
+        }
+      }
+
       // Sort reverse-chronologically (newest first)
       userPosts.sort((a, b) => new Date(b.dateCreated).getTime() - new Date(a.dateCreated).getTime());
       setPosts(userPosts);
@@ -729,7 +746,24 @@ const Profile: React.FC = () => {
     try {
       const response = await api.get('/api/posts');
       const allPosts: PostData[] = response.data;
-      const userPosts = allPosts.filter(p => p.userEmail === email || p.userName.toLowerCase() === email.toLowerCase() || p.userId === email);
+      const params = new URLSearchParams(location.search);
+      const targetPostId = params.get('postId') || (location.hash ? location.hash.replace('#post-', '') : null);
+
+      const targetEmail = (email || '').toLowerCase().trim();
+      const userPosts = allPosts.filter(p => 
+        (p.userEmail && p.userEmail.toLowerCase().trim() === targetEmail) ||
+        (p.userName && p.userName.toLowerCase().trim() === targetEmail) ||
+        (p.userId && p.userId.toLowerCase().trim() === targetEmail)
+      );
+
+      // Ensure target post from notification hyperlink is included
+      if (targetPostId) {
+        const foundTarget = allPosts.find(p => p.id === targetPostId);
+        if (foundTarget && !userPosts.some(p => p.id === targetPostId)) {
+          userPosts.unshift(foundTarget);
+        }
+      }
+
       userPosts.sort((a, b) => new Date(b.dateCreated).getTime() - new Date(a.dateCreated).getTime());
       setPosts(userPosts);
       setPostsLoading(false);
@@ -942,13 +976,37 @@ const Profile: React.FC = () => {
 
     const params = new URLSearchParams(location.search);
     const emailParam = params.get('email');
-    if (emailParam && emailParam !== user?.email) {
+    const myEmail = (user?.email || '').toLowerCase().trim();
+    if (emailParam && emailParam.toLowerCase().trim() !== myEmail) {
       fetchOtherUserProfile(emailParam);
     } else {
       fetchProfile();
       fetchPosts();
     }
   }, [location, user]);
+
+  // Scroll to and highlight targeted post from notification hyperlink
+  useEffect(() => {
+    if (postsLoading || posts.length === 0) return;
+    const params = new URLSearchParams(location.search);
+    const targetPostId = params.get('postId') || (location.hash ? location.hash.replace('#post-', '') : null);
+    if (!targetPostId) return;
+
+    const timer = setTimeout(() => {
+      const postEl = document.getElementById(`post-${targetPostId}`);
+      if (postEl) {
+        postEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        postEl.style.transition = 'all 0.5s ease';
+        postEl.style.boxShadow = '0 0 0 3px var(--accent-primary), 0 8px 24px rgba(59, 130, 246, 0.4)';
+        postEl.style.borderRadius = '12px';
+        setTimeout(() => {
+          postEl.style.boxShadow = '';
+        }, 3500);
+      }
+    }, 250);
+
+    return () => clearTimeout(timer);
+  }, [postsLoading, posts.length, location.search, location.hash]);
 
   const handleEditToggle = () => {
     if (isEditing && profile) {
@@ -1927,32 +1985,34 @@ const Profile: React.FC = () => {
                       </div>
 
                       {/* Edit & Delete Options */}
-                      <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-                        <button
-                          onClick={() => handleEditPostClick(post)}
-                          style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: '0.25rem', transition: 'color 0.2s' }}
-                          title="Edit Post"
-                          className="edit-post-btn"
-                        >
-                          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ verticalAlign: 'middle' }}>
-                            <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
-                            <path d="M18.5 2.5a2.121 2.121 0 1 1 3 3L12 15l-4 1 1-4z"></path>
-                          </svg>
-                        </button>
-                        <button
-                          onClick={() => handleDeletePost(post.id)}
-                          style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: '0.25rem', transition: 'color 0.2s' }}
-                          title="Delete Post"
-                          className="delete-post-btn"
-                        >
-                          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ verticalAlign: 'middle' }}>
-                            <polyline points="3 6 5 6 21 6"></polyline>
-                            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
-                            <line x1="10" y1="11" x2="10" y2="17"></line>
-                            <line x1="14" y1="11" x2="14" y2="17"></line>
-                          </svg>
-                        </button>
-                      </div>
+                      {(!isOtherProfile || post.userEmail?.toLowerCase() === user?.email?.toLowerCase()) && (
+                        <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                          <button
+                            onClick={() => handleEditPostClick(post)}
+                            style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: '0.25rem', transition: 'color 0.2s' }}
+                            title="Edit Post"
+                            className="edit-post-btn"
+                          >
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ verticalAlign: 'middle' }}>
+                              <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                              <path d="M18.5 2.5a2.121 2.121 0 1 1 3 3L12 15l-4 1 1-4z"></path>
+                            </svg>
+                          </button>
+                          <button
+                            onClick={() => handleDeletePost(post.id)}
+                            style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: '0.25rem', transition: 'color 0.2s' }}
+                            title="Delete Post"
+                            className="delete-post-btn"
+                          >
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ verticalAlign: 'middle' }}>
+                              <polyline points="3 6 5 6 21 6"></polyline>
+                              <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                              <line x1="10" y1="11" x2="10" y2="17"></line>
+                              <line x1="14" y1="11" x2="14" y2="17"></line>
+                            </svg>
+                          </button>
+                        </div>
+                      )}
                     </div>
 
                     {/* Post Description */}

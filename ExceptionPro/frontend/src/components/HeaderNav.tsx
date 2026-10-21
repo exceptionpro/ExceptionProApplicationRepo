@@ -166,6 +166,9 @@ const HeaderNav: React.FC = () => {
             {/* 4. Messaging Icon with Messaging Label */}
             <Link
               to="/messaging"
+              onClick={() => {
+                window.scrollTo({ top: 0, behavior: 'instant' });
+              }}
               className={`nav-link nav-icon-link ${isMessagingActive ? 'active' : ''}`}
               title="Messaging"
             >

@@ -6,6 +6,7 @@ public class CatalogueRequest {
     private String productName;
     private String productType;
     private BigDecimal price;
+    private String currencyType;
     private String description;
     private String imageUrl;
 
@@ -31,6 +32,14 @@ public class CatalogueRequest {
 
     public void setPrice(BigDecimal price) {
         this.price = price;
+    }
+
+    public String getCurrencyType() {
+        return currencyType;
+    }
+
+    public void setCurrencyType(String currencyType) {
+        this.currencyType = currencyType;
     }
 
     public String getDescription() {

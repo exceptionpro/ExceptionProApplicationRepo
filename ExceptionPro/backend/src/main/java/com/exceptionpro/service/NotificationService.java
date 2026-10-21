@@ -7,10 +7,13 @@ import com.exceptionpro.entity.User;
 import com.exceptionpro.repository.BusinessPartnerRequestRepository;
 import com.exceptionpro.repository.NotificationRepository;
 import com.exceptionpro.repository.UserRepository;
+import com.exceptionpro.entity.Post;
+import com.exceptionpro.repository.PostRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.Collection;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
@@ -23,13 +26,16 @@ public class NotificationService {
     private final NotificationRepository notificationRepository;
     private final UserRepository userRepository;
     private final BusinessPartnerRequestRepository partnerRequestRepository;
+    private final PostRepository postRepository;
 
     public NotificationService(NotificationRepository notificationRepository,
                                UserRepository userRepository,
-                               BusinessPartnerRequestRepository partnerRequestRepository) {
+                               BusinessPartnerRequestRepository partnerRequestRepository,
+                               PostRepository postRepository) {
         this.notificationRepository = notificationRepository;
         this.userRepository = userRepository;
         this.partnerRequestRepository = partnerRequestRepository;
+        this.postRepository = postRepository;
     }
 
     public Notification createNotification(User recipient, User sender, String category, String title,
@@ -55,33 +61,109 @@ public class NotificationService {
         return notificationRepository.save(notification);
     }
 
-    @Transactional(readOnly = true)
     public List<NotificationResponse> getUserNotifications(String userEmail, String category) {
         User user = userRepository.findByEmail(userEmail)
                 .orElseThrow(() -> new IllegalArgumentException("User not found"));
 
-        List<Notification> list;
-        if (category == null || category.isBlank() || category.equalsIgnoreCase("ALL")) {
-            list = notificationRepository.findByRecipientIdOrderByCreatedAtDesc(user.getId());
-        } else {
-            list = notificationRepository.findByRecipientIdAndCategoryOrderByCreatedAtDesc(user.getId(), category.toUpperCase());
+        boolean isAll = (category == null || category.isBlank() || category.equalsIgnoreCase("ALL"));
+        boolean isPosts = (category != null && (category.equalsIgnoreCase("POSTS") || category.equalsIgnoreCase("POST")));
+        boolean isMyPost = (category != null && (category.equalsIgnoreCase("MY_POST") || category.equalsIgnoreCase("MY_POSTS")));
+
+        // If checking MY_POST or ALL: ensure user's own posts have published notifications
+        if (isMyPost || isAll) {
+            syncMyPostNotifications(user);
         }
 
-        // If filtering POSTS notifications, display only posts created by accepted Business Partners of the logged-in user
-        if (category != null && category.equalsIgnoreCase("POSTS")) {
-            List<BusinessPartnerRequest> acceptedRequests = partnerRequestRepository.findAcceptedPartnerships(user.getId());
-            Set<UUID> partnerUserIds = acceptedRequests.stream()
-                    .map(r -> r.getSender().getId().equals(user.getId()) ? r.getReceiver().getId() : r.getSender().getId())
-                    .collect(Collectors.toSet());
+        // If checking POSTS or ALL: ensure accepted business partners' posts have notifications
+        Set<UUID> partnerUserIds = Set.of();
+        if (isPosts || isAll) {
+            partnerUserIds = syncPartnerPostNotifications(user);
+        }
 
+        List<Notification> list;
+        if (isAll) {
+            list = notificationRepository.findByRecipientIdOrderByCreatedAtDesc(user.getId());
+            final Set<UUID> finalPartnerIds = partnerUserIds;
             list = list.stream()
-                    .filter(n -> n.getSender() != null && partnerUserIds.contains(n.getSender().getId()))
+                    .filter(n -> !"POSTS".equalsIgnoreCase(n.getCategory()) || (n.getSender() != null && finalPartnerIds.contains(n.getSender().getId())))
                     .collect(Collectors.toList());
+        } else if (isPosts) {
+            list = notificationRepository.findByRecipientIdAndCategoryInOrderByCreatedAtDesc(user.getId(), List.of("POSTS", "POST"));
+            final Set<UUID> finalPartnerIds = partnerUserIds;
+            list = list.stream()
+                    .filter(n -> n.getSender() != null && finalPartnerIds.contains(n.getSender().getId()))
+                    .collect(Collectors.toList());
+        } else if (isMyPost) {
+            list = notificationRepository.findByRecipientIdAndCategoryInOrderByCreatedAtDesc(user.getId(), List.of("MY_POST", "MY_POSTS"));
+        } else {
+            list = notificationRepository.findByRecipientIdAndCategoryOrderByCreatedAtDesc(user.getId(), category.toUpperCase());
         }
 
         return list.stream()
                 .map(this::mapToResponse)
                 .collect(Collectors.toList());
+    }
+
+    private void syncMyPostNotifications(User user) {
+        List<Post> myPosts = postRepository.findByUserIdOrderByDateCreatedDesc(user.getId());
+        for (Post p : myPosts) {
+            if ("DELETED".equalsIgnoreCase(p.getStatus())) {
+                continue;
+            }
+            boolean exists = notificationRepository.existsByRecipientIdAndReferenceIdAndCategoryInAndTitle(
+                    user.getId(), p.getId(), List.of("MY_POST", "MY_POSTS"), "Post Published"
+            );
+            if (!exists) {
+                Notification notification = new Notification();
+                notification.setId(UUID.randomUUID());
+                notification.setRecipient(user);
+                notification.setSender(user);
+                notification.setCategory("MY_POST");
+                notification.setTitle("Post Published");
+                String postDesc = p.getPostDescription() != null ? p.getPostDescription().trim() : "";
+                String snippet = postDesc.length() > 80 ? postDesc.substring(0, 80) + "..." : postDesc;
+                notification.setMessage("You published a new post: \"" + snippet + "\"");
+                notification.setReferenceId(p.getId());
+                notification.setReferenceType("POST");
+                notification.setRead(false);
+                notification.setCreatedAt(p.getDateCreated() != null ? p.getDateCreated() : LocalDateTime.now());
+                notificationRepository.save(notification);
+            }
+        }
+    }
+
+    private Set<UUID> syncPartnerPostNotifications(User user) {
+        List<BusinessPartnerRequest> acceptedRequests = partnerRequestRepository.findAcceptedPartnerships(user.getId());
+        Set<UUID> partnerUserIds = acceptedRequests.stream()
+                .map(r -> r.getSender().getId().equals(user.getId()) ? r.getReceiver().getId() : r.getSender().getId())
+                .collect(Collectors.toSet());
+
+        if (!partnerUserIds.isEmpty()) {
+            List<Post> partnerPosts = postRepository.findByUserIdInAndStatusOrderByDateCreatedDesc(partnerUserIds, "ACTIVE");
+            for (Post pp : partnerPosts) {
+                boolean exists = notificationRepository.existsByRecipientIdAndReferenceIdAndCategory(
+                        user.getId(), pp.getId(), "POSTS"
+                );
+                if (!exists) {
+                    Notification notification = new Notification();
+                    notification.setId(UUID.randomUUID());
+                    notification.setRecipient(user);
+                    notification.setSender(pp.getUser());
+                    notification.setCategory("POSTS");
+                    notification.setTitle("New Post from Business Partner");
+                    String postDesc = pp.getPostDescription() != null ? pp.getPostDescription().trim() : "";
+                    String snippet = postDesc.length() > 80 ? postDesc.substring(0, 80) + "..." : postDesc;
+                    String authorName = getUserDisplayName(pp.getUser());
+                    notification.setMessage(authorName + " published a new post: \"" + snippet + "\"");
+                    notification.setReferenceId(pp.getId());
+                    notification.setReferenceType("POST");
+                    notification.setRead(false);
+                    notification.setCreatedAt(pp.getDateCreated() != null ? pp.getDateCreated() : LocalDateTime.now());
+                    notificationRepository.save(notification);
+                }
+            }
+        }
+        return partnerUserIds;
     }
 
     public void markAsRead(UUID id, String userEmail) {

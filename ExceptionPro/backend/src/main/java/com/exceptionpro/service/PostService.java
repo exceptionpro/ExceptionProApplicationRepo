@@ -82,12 +82,25 @@ public class PostService {
 
         Post saved = postRepository.save(post);
 
+        String postDesc = saved.getPostDescription() != null ? saved.getPostDescription().trim() : "";
+        String snippet = postDesc.length() > 80 ? postDesc.substring(0, 80) + "..." : postDesc;
+
+        // Notify author under MY_POST category of their own posting
+        notificationService.createNotification(
+                user,
+                user,
+                "MY_POST",
+                "Post Published",
+                "You published a new post: \"" + snippet + "\"",
+                null,
+                saved.getId(),
+                "POST"
+        );
+
         // Notify all accepted Business Partners about the new Post
         List<BusinessPartnerRequest> acceptedPartnerships = partnerRequestRepository.findAcceptedPartnerships(user.getId());
         for (BusinessPartnerRequest pr : acceptedPartnerships) {
             User partnerUser = pr.getSender().getId().equals(user.getId()) ? pr.getReceiver() : pr.getSender();
-            String postDesc = saved.getPostDescription() != null ? saved.getPostDescription().trim() : "";
-            String snippet = postDesc.length() > 80 ? postDesc.substring(0, 80) + "..." : postDesc;
             String msg = name + " published a new post: \"" + snippet + "\"";
 
             notificationService.createNotification(

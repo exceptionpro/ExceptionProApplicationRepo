@@ -71,6 +71,11 @@ const Messaging: React.FC = () => {
   const { user } = useAuth();
   const [conversations, setConversations] = useState<ConversationSummary[]>([]);
   const [searchFilter, setSearchFilter] = useState('');
+  const [isSearchFocused, setIsSearchFocused] = useState(false);
+  const isSearching = Boolean(searchFilter.trim() || isSearchFocused);
+  const isSearchingRef = useRef(false);
+  isSearchingRef.current = isSearching;
+
   const [selectedPartner, setSelectedPartner] = useState<SelectedPartner | null>(null);
   const [messages, setMessages] = useState<DirectMessageItem[]>([]);
   const [messageInput, setMessageInput] = useState('');
@@ -82,10 +87,11 @@ const Messaging: React.FC = () => {
   const [activeEmojiTab, setActiveEmojiTab] = useState(0);
   const [gifSearch, setGifSearch] = useState('');
 
-  // Hidden File Inputs
+  // Hidden File Inputs & Scroll Refs
   const imageInputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const messagesContainerRef = useRef<HTMLDivElement>(null);
 
   const getMediaUrl = (url?: string) => {
     if (!url) return '';
@@ -122,15 +128,40 @@ const Messaging: React.FC = () => {
     }
   };
 
-  const fetchThread = async (partnerEmailOrId: string) => {
+  const fetchThread = async (partnerEmailOrId: string, isPolling = false) => {
     if (!user || !partnerEmailOrId) return;
     try {
       const res = await api.get(`/api/messages/conversation?email=${encodeURIComponent(partnerEmailOrId)}`);
-      setMessages(res.data || []);
+      const newMessages: DirectMessageItem[] = res.data || [];
+      if (isPolling) {
+        setMessages((prev) => {
+          if (prev.length === newMessages.length) {
+            const isUnchanged = prev.every((m, idx) => m.id === newMessages[idx]?.id && m.messageText === newMessages[idx]?.messageText);
+            if (isUnchanged) return prev;
+          }
+          return newMessages;
+        });
+      } else {
+        setMessages(newMessages);
+      }
     } catch (err) {
       console.error('Error fetching conversation thread:', err);
     }
   };
+
+  // Scroll to top on page load and ensure window scroll stays pinned to top on Messaging page
+  useEffect(() => {
+    window.scrollTo(0, 0);
+
+    const lockWindowScroll = () => {
+      if (window.scrollY > 0) {
+        window.scrollTo(0, 0);
+      }
+    };
+
+    window.addEventListener('scroll', lockWindowScroll, { passive: true });
+    return () => window.removeEventListener('scroll', lockWindowScroll);
+  }, []);
 
   useEffect(() => {
     if (!user) return;
@@ -139,7 +170,7 @@ const Messaging: React.FC = () => {
     const interval = setInterval(() => {
       fetchConversations();
       if (selectedPartner) {
-        fetchThread(selectedPartner.email);
+        fetchThread(selectedPartner.email, true);
       }
     }, 4000);
 
@@ -147,9 +178,25 @@ const Messaging: React.FC = () => {
   }, [user, selectedPartner?.email]);
 
   useEffect(() => {
-    if (messagesEndRef.current) {
-      messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
+    // Expected Result: In Messaging Tab, IF i try to search any existing chat messages,
+    // the browser vertical scroll should not automatically move down.
+    // When messages update, scroll ONLY the chat messages container internally so existing messages
+    // are visible at the bottom of the conversation, WITHOUT moving the browser vertical scroll!
+    if (messagesContainerRef.current) {
+      messagesContainerRef.current.scrollTop = messagesContainerRef.current.scrollHeight;
     }
+    if (window.scrollY > 0) {
+      window.scrollTo(0, 0);
+    }
+    const frameId = requestAnimationFrame(() => {
+      if (messagesContainerRef.current) {
+        messagesContainerRef.current.scrollTop = messagesContainerRef.current.scrollHeight;
+      }
+      if (window.scrollY > 0) {
+        window.scrollTo(0, 0);
+      }
+    });
+    return () => cancelAnimationFrame(frameId);
   }, [messages]);
 
   const handleSelectConversation = (conv: ConversationSummary) => {
@@ -161,6 +208,19 @@ const Messaging: React.FC = () => {
       id: conv.partnerId
     });
     fetchThread(conv.partnerEmail);
+
+    // Keep browser window scroll strictly at top when selecting a conversation
+    if (window.scrollY > 0) {
+      window.scrollTo(0, 0);
+    }
+    requestAnimationFrame(() => {
+      if (messagesContainerRef.current) {
+        messagesContainerRef.current.scrollTop = messagesContainerRef.current.scrollHeight;
+      }
+      if (window.scrollY > 0) {
+        window.scrollTo(0, 0);
+      }
+    });
   };
 
   const handleSendMessage = async (e: React.FormEvent) => {
@@ -176,8 +236,14 @@ const Messaging: React.FC = () => {
         receiverEmail: selectedPartner.email,
         messageText: textToSend
       });
-      fetchThread(selectedPartner.email);
+      await fetchThread(selectedPartner.email);
       fetchConversations();
+      if (messagesContainerRef.current) {
+        messagesContainerRef.current.scrollTo({
+          top: messagesContainerRef.current.scrollHeight,
+          behavior: 'smooth'
+        });
+      }
     } catch (err) {
       console.error('Failed to send message:', err);
     } finally {
@@ -201,8 +267,14 @@ const Messaging: React.FC = () => {
         receiverEmail: selectedPartner.email,
         messageText: `📷 [image](${fileUrl})`
       });
-      fetchThread(selectedPartner.email);
+      await fetchThread(selectedPartner.email);
       fetchConversations();
+      if (messagesContainerRef.current) {
+        messagesContainerRef.current.scrollTo({
+          top: messagesContainerRef.current.scrollHeight,
+          behavior: 'smooth'
+        });
+      }
     } catch (err) {
       console.error('Failed to attach image:', err);
     } finally {
@@ -227,8 +299,14 @@ const Messaging: React.FC = () => {
         receiverEmail: selectedPartner.email,
         messageText: `📎 [file: ${file.name}](${fileUrl})`
       });
-      fetchThread(selectedPartner.email);
+      await fetchThread(selectedPartner.email);
       fetchConversations();
+      if (messagesContainerRef.current) {
+        messagesContainerRef.current.scrollTo({
+          top: messagesContainerRef.current.scrollHeight,
+          behavior: 'smooth'
+        });
+      }
     } catch (err) {
       console.error('Failed to attach file:', err);
     } finally {
@@ -246,8 +324,14 @@ const Messaging: React.FC = () => {
         receiverEmail: selectedPartner.email,
         messageText: `GIF: ${gifUrl}`
       });
-      fetchThread(selectedPartner.email);
+      await fetchThread(selectedPartner.email);
       fetchConversations();
+      if (messagesContainerRef.current) {
+        messagesContainerRef.current.scrollTo({
+          top: messagesContainerRef.current.scrollHeight,
+          behavior: 'smooth'
+        });
+      }
     } catch (err) {
       console.error('Failed to send GIF:', err);
     } finally {
@@ -259,7 +343,7 @@ const Messaging: React.FC = () => {
     try {
       const date = new Date(isoString);
       return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    } catch (e) {
+    } catch (_e) {
       return '';
     }
   };
@@ -340,7 +424,18 @@ const Messaging: React.FC = () => {
         </div>
 
         {/* Messaging Layout Container */}
-        <div className="glass-card messaging-page-container" style={{ display: 'flex', height: '680px', padding: 0, overflow: 'hidden' }}>
+        <div
+          className="glass-card messaging-page-container"
+          style={{
+            display: 'flex',
+            height: 'calc(100vh - 210px)',
+            minHeight: '520px',
+            maxHeight: '680px',
+            padding: 0,
+            overflow: 'hidden',
+            overflowAnchor: 'none'
+          }}
+        >
           {/* Left Panel: Search Bar & Conversations List */}
           <div className="messaging-page-sidebar" style={{ width: '340px', borderRight: '1px solid var(--border-color)', display: 'flex', flexDirection: 'column' }}>
             {/* Search Box */}
@@ -364,7 +459,19 @@ const Messaging: React.FC = () => {
                   type="text"
                   placeholder="Search messages by name, email or content..."
                   value={searchFilter}
-                  onChange={(e) => setSearchFilter(e.target.value)}
+                  onFocus={() => {
+                    setIsSearchFocused(true);
+                    if (window.scrollY > 0) {
+                      window.scrollTo(0, 0);
+                    }
+                  }}
+                  onBlur={() => setIsSearchFocused(false)}
+                  onChange={(e) => {
+                    setSearchFilter(e.target.value);
+                    if (window.scrollY > 0) {
+                      window.scrollTo(0, 0);
+                    }
+                  }}
                   style={{
                     width: '100%',
                     padding: '0.6rem 0.75rem 0.6rem 2.25rem',
@@ -379,7 +486,7 @@ const Messaging: React.FC = () => {
             </div>
 
             {/* Conversations List */}
-            <div style={{ flex: 1, overflowY: 'auto' }}>
+            <div style={{ flex: 1, overflowY: 'auto', overflowAnchor: 'none' }}>
               {filteredConversations.length > 0 ? (
                 filteredConversations.map((conv) => {
                   const avatarUrl = getMediaUrl(conv.partnerAvatar);
@@ -481,7 +588,15 @@ const Messaging: React.FC = () => {
                 />
 
                 {/* Messages List */}
-                <div style={{ flex: 1, padding: '1.5rem', overflowY: 'auto' }}>
+                <div
+                  ref={messagesContainerRef}
+                  style={{
+                    flex: 1,
+                    padding: '1.5rem',
+                    overflowY: 'auto',
+                    overflowAnchor: 'none'
+                  }}
+                >
                   {messages.length > 0 ? (
                     messages.map((msg) => {
                       const isMine = msg.senderEmail.toLowerCase() === user?.email.toLowerCase();

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Navigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import LeftNavigation from '../components/LeftNavigation';
@@ -9,6 +9,7 @@ interface CatalogueItem {
   productName: string;
   productType: string;
   price: number;
+  currencyType?: string;
   description: string;
   imageUrl: string | null;
   userId: string;
@@ -34,9 +35,11 @@ const Catalogue: React.FC = () => {
   const [productName, setProductName] = useState('');
   const [productType, setProductType] = useState('');
   const [price, setPrice] = useState('');
+  const [currencyType, setCurrencyType] = useState('');
   const [description, setDescription] = useState('');
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [imageUploading, setImageUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Fetch all catalogues for this user
   const fetchCatalogues = async () => {
@@ -88,9 +91,14 @@ const Catalogue: React.FC = () => {
     setProductName('');
     setProductType('');
     setPrice('');
+    setCurrencyType('');
     setDescription('');
     setImageUrl(null);
+    setImageUploading(false);
     setError(null);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
   };
 
   // Create or Update Catalogue
@@ -105,10 +113,16 @@ const Catalogue: React.FC = () => {
       return;
     }
 
+    if (!currencyType.trim()) {
+      setError('Currency Type is required');
+      return;
+    }
+
     const payload = {
       productName,
       productType,
       price: priceNum,
+      currencyType: currencyType.trim(),
       description,
       imageUrl,
     };
@@ -154,8 +168,13 @@ const Catalogue: React.FC = () => {
     setProductName(item.productName);
     setProductType(item.productType);
     setPrice(item.price.toString());
+    setCurrencyType(item.currencyType || '');
     setDescription(item.description);
     setImageUrl(item.imageUrl);
+    setImageUploading(false);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
@@ -217,20 +236,36 @@ const Catalogue: React.FC = () => {
 
               <div className="form-row">
                 <div className="form-group half-width">
-                  <label className="form-label">Price ($) *</label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    className="form-input"
-                    placeholder="Enter product price"
-                    value={price}
-                    onChange={(e) => setPrice(e.target.value)}
-                    required
-                  />
+                  <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
+                    <div style={{ flex: '1 1 120px' }}>
+                      <label className="form-label">Price *</label>
+                      <input
+                        type="number"
+                        step="0.01"
+                        className="form-input"
+                        placeholder="Enter price"
+                        value={price}
+                        onChange={(e) => setPrice(e.target.value)}
+                        required
+                      />
+                    </div>
+                    <div style={{ flex: '1 1 120px' }}>
+                      <label className="form-label">Currency Type *</label>
+                      <input
+                        type="text"
+                        className="form-input"
+                        placeholder="e.g. USD, EUR, INR"
+                        value={currencyType}
+                        onChange={(e) => setCurrencyType(e.target.value)}
+                        required
+                      />
+                    </div>
+                  </div>
                 </div>
                 <div className="form-group half-width">
                   <label className="form-label">Upload Product Image (optional)</label>
                   <input
+                    ref={fileInputRef}
                     type="file"
                     className="form-input"
                     accept="image/*"
@@ -333,7 +368,7 @@ const Catalogue: React.FC = () => {
                         {item.productType}
                       </span>
                       <p style={{ margin: 0, fontSize: '1rem', fontWeight: 'bold', color: 'var(--accent-primary)' }}>
-                        ${item.price.toFixed(2)}
+                        {item.currencyType ? `${item.currencyType} ` : '$'}{item.price.toFixed(2)}
                       </p>
                       <p style={{ margin: 0, fontSize: '0.75rem', color: 'var(--text-secondary)', display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden', height: '48px', lineHeight: '16px' }} title={item.description}>
                         {item.description}

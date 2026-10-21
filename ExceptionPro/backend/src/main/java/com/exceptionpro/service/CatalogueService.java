@@ -52,6 +52,9 @@ public class CatalogueService {
         if (request.getPrice() == null) {
             throw new IllegalArgumentException("Price is required");
         }
+        if (request.getCurrencyType() == null || request.getCurrencyType().isBlank()) {
+            throw new IllegalArgumentException("Currency Type is required");
+        }
         if (request.getDescription() == null || request.getDescription().isBlank()) {
             throw new IllegalArgumentException("Description is required");
         }
@@ -62,6 +65,7 @@ public class CatalogueService {
         catalogue.setProductName(request.getProductName());
         catalogue.setProductType(request.getProductType());
         catalogue.setPrice(request.getPrice());
+        catalogue.setCurrencyType(request.getCurrencyType().trim());
         catalogue.setDescription(request.getDescription());
         catalogue.setImageUrl(request.getImageUrl());
         catalogue.setCreatedAt(LocalDateTime.now());
@@ -97,6 +101,9 @@ public class CatalogueService {
         catalogue.setProductName(request.getProductName());
         catalogue.setProductType(request.getProductType());
         catalogue.setPrice(request.getPrice());
+        if (request.getCurrencyType() != null && !request.getCurrencyType().isBlank()) {
+            catalogue.setCurrencyType(request.getCurrencyType().trim());
+        }
         catalogue.setDescription(request.getDescription());
         catalogue.setImageUrl(request.getImageUrl());
 
@@ -124,6 +131,7 @@ public class CatalogueService {
                 c.getProductName(),
                 c.getProductType(),
                 c.getPrice(),
+                c.getCurrencyType() != null ? c.getCurrencyType() : "USD",
                 c.getDescription(),
                 c.getImageUrl(),
                 c.getUser().getId(),

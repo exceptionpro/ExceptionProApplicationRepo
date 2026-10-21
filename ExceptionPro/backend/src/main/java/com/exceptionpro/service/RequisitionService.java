@@ -389,6 +389,7 @@ public class RequisitionService {
                         c.getProductName(),
                         c.getProductType(),
                         c.getPrice(),
+                        c.getCurrencyType() != null ? c.getCurrencyType() : "USD",
                         c.getDescription(),
                         c.getImageUrl(),
                         c.getUser().getId(),

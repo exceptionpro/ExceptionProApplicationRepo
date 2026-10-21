@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { useLocation } from 'react-router-dom';
 import api from '../services/api';
 import { useAuth } from '../context/AuthContext';
 
@@ -38,6 +39,7 @@ export interface SelectedPartner {
 
 const MessagingWidget: React.FC = () => {
   const { user } = useAuth();
+  const location = useLocation();
   const [isCollapsed, setIsCollapsed] = useState<boolean>(true);
   const [conversations, setConversations] = useState<ConversationSummary[]>([]);
   const [selectedPartner, setSelectedPartner] = useState<SelectedPartner | null>(null);
@@ -45,6 +47,7 @@ const MessagingWidget: React.FC = () => {
   const [messageInput, setMessageInput] = useState('');
   const [sending, setSending] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const messagesContainerRef = useRef<HTMLDivElement>(null);
 
   const getMediaUrl = (url?: string) => {
     if (!url) return '';
@@ -119,9 +122,9 @@ const MessagingWidget: React.FC = () => {
     return () => window.removeEventListener('openChatWithUser', handleOpenChat);
   }, []);
 
-  // Poll for messages every 4 seconds when user is logged in
+  // Poll for messages every 4 seconds when user is logged in (except when already on /messaging page)
   useEffect(() => {
-    if (!user) return;
+    if (!user || location.pathname === '/messaging') return;
     fetchConversations();
 
     const interval = setInterval(() => {
@@ -132,12 +135,12 @@ const MessagingWidget: React.FC = () => {
     }, 4000);
 
     return () => clearInterval(interval);
-  }, [user, selectedPartner?.email]);
+  }, [user, selectedPartner?.email, location.pathname]);
 
-  // Scroll to bottom when messages update
+  // Scroll to bottom when messages update (scroll container only, never window)
   useEffect(() => {
-    if (messagesEndRef.current) {
-      messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
+    if (messagesContainerRef.current) {
+      messagesContainerRef.current.scrollTop = messagesContainerRef.current.scrollHeight;
     }
   }, [messages]);
 
@@ -174,19 +177,6 @@ const MessagingWidget: React.FC = () => {
     }
   };
 
-  if (!user) return null;
-
-  const totalUnread = conversations.reduce((acc, curr) => acc + (curr.unreadCount || 0), 0);
-
-  const formatTime = (isoString: string) => {
-    try {
-      const date = new Date(isoString);
-      return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    } catch (e) {
-      return '';
-    }
-  };
-
   // State for GIF and Emoji Keyboards
   const [showGifKeyboard, setShowGifKeyboard] = useState(false);
   const [showEmojiKeyboard, setShowEmojiKeyboard] = useState(false);
@@ -196,6 +186,19 @@ const MessagingWidget: React.FC = () => {
   // Hidden File Input Refs
   const imageInputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  if (!user || location.pathname === '/messaging') return null;
+
+  const totalUnread = conversations.reduce((acc, curr) => acc + (curr.unreadCount || 0), 0);
+
+  const formatTime = (isoString: string) => {
+    try {
+      const date = new Date(isoString);
+      return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    } catch (_e) {
+      return '';
+    }
+  };
 
   const EMOJI_CATEGORIES = [
     {
@@ -435,7 +438,7 @@ const MessagingWidget: React.FC = () => {
               </div>
 
               {/* Message List (Last 90 days) */}
-              <div className="messaging-thread-messages">
+              <div ref={messagesContainerRef} className="messaging-thread-messages" style={{ overflowAnchor: 'none' }}>
                 {messages.length > 0 ? (
                   messages.map((msg) => {
                     const isMine = msg.senderEmail.toLowerCase() === user.email.toLowerCase();

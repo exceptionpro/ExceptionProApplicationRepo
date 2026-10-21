@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import LeftNavigation from '../components/LeftNavigation';
 import api from '../services/api';
 
@@ -22,10 +23,33 @@ export interface NotificationItem {
 type TabCategory = 'ALL' | 'REQUISITIONS' | 'COLLABORATIONS' | 'POSTS' | 'MY_POST';
 
 const NotificationsPage: React.FC = () => {
+  const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<TabCategory>('ALL');
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string>('');
+
+  const getPostUrl = (item: NotificationItem): string | null => {
+    const cat = (item.category || '').toUpperCase();
+    const isMyPost = cat === 'MY_POST' || cat === 'MY_POSTS';
+    const isPartnerPost = cat === 'POSTS' || cat === 'POST';
+    const isPost = isMyPost || isPartnerPost || item.referenceType === 'POST';
+
+    if (!isPost || !item.referenceId) return null;
+
+    if (isMyPost) {
+      return `/profile?postId=${item.referenceId}#post-${item.referenceId}`;
+    }
+
+    if (isPartnerPost) {
+      if (item.senderEmail) {
+        return `/profile?email=${encodeURIComponent(item.senderEmail)}&postId=${item.referenceId}#post-${item.referenceId}`;
+      }
+      return `/profile?postId=${item.referenceId}#post-${item.referenceId}`;
+    }
+
+    return null;
+  };
 
   useEffect(() => {
     fetchNotifications();
@@ -86,9 +110,11 @@ const NotificationsPage: React.FC = () => {
       case 'COLLABORATIONS':
         return <span className="badge" style={{ background: 'rgba(168, 85, 247, 0.15)', color: '#a855f7', border: '1px solid rgba(168, 85, 247, 0.3)', padding: '0.2rem 0.6rem', borderRadius: '12px', fontSize: '0.75rem', fontWeight: 600 }}>Collaborations</span>;
       case 'POSTS':
+      case 'POST':
         return <span className="badge" style={{ background: 'rgba(16, 185, 129, 0.15)', color: '#10b981', border: '1px solid rgba(16, 185, 129, 0.3)', padding: '0.2rem 0.6rem', borderRadius: '12px', fontSize: '0.75rem', fontWeight: 600 }}>Posts</span>;
       case 'MY_POST':
-        return <span className="badge" style={{ background: 'rgba(245, 158, 11, 0.15)', color: '#f59e0b', border: '1px solid rgba(245, 158, 11, 0.3)', padding: '0.2rem 0.6rem', borderRadius: '12px', fontSize: '0.75rem', fontWeight: 600 }}>My Post</span>;
+      case 'MY_POSTS':
+        return <span className="badge" style={{ background: 'rgba(245, 158, 11, 0.15)', color: '#f59e0b', border: '1px solid rgba(245, 158, 11, 0.3)', padding: '0.2rem 0.6rem', borderRadius: '12px', fontSize: '0.75rem', fontWeight: 600 }}>My Posts</span>;
       default:
         return <span className="badge" style={{ background: 'var(--bg-secondary)', color: 'var(--text-muted)', border: '1px solid var(--border-color)', padding: '0.2rem 0.6rem', borderRadius: '12px', fontSize: '0.75rem', fontWeight: 600 }}>General</span>;
     }
@@ -99,7 +125,7 @@ const NotificationsPage: React.FC = () => {
     { key: 'REQUISITIONS', label: 'Requisitions' },
     { key: 'COLLABORATIONS', label: 'Collaborations' },
     { key: 'POSTS', label: 'Posts' },
-    { key: 'MY_POST', label: 'My Post' },
+    { key: 'MY_POST', label: 'My Posts' },
   ];
 
   const unreadCount = notifications.filter((n) => !n.isRead).length;
@@ -188,110 +214,184 @@ const NotificationsPage: React.FC = () => {
                 <path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
               </svg>
               <h4 style={{ margin: '0 0 0.25rem 0', color: 'var(--text-primary)', fontSize: '1.1rem' }}>No notifications found</h4>
-              <p style={{ margin: 0, fontSize: '0.875rem' }}>There are no {activeTab !== 'ALL' ? activeTab.toLowerCase().replace('_', ' ') : ''} notifications at this time.</p>
+              <p style={{ margin: 0, fontSize: '0.875rem' }}>There are no {activeTab !== 'ALL' ? (activeTab === 'MY_POST' ? 'my posts' : activeTab.toLowerCase().replace('_', ' ')) : ''} notifications at this time.</p>
             </div>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', width: '100%', boxSizing: 'border-box' }}>
-              {notifications.map((item) => (
-                <div
-                  key={item.id}
-                  onClick={() => !item.isRead && markAsRead(item.id)}
-                  style={{
-                    background: item.isRead ? 'var(--bg-secondary)' : 'rgba(59, 130, 246, 0.04)',
-                    border: item.isRead ? '1px solid var(--border-color)' : '1px solid rgba(59, 130, 246, 0.3)',
-                    borderRadius: '12px',
-                    padding: '1.25rem',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    gap: '0.75rem',
-                    transition: 'all 0.2s ease',
-                    position: 'relative',
-                    cursor: item.isRead ? 'default' : 'pointer',
-                    width: '100%',
-                    boxSizing: 'border-box',
-                  }}
-                >
-                  {/* Item Header */}
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '0.75rem', width: '100%' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+              {notifications.map((item) => {
+                const postUrl = getPostUrl(item);
+                const catUpper = (item.category || '').toUpperCase();
+                const isMyPost = catUpper === 'MY_POST' || catUpper === 'MY_POSTS';
+
+                const handleCardClick = () => {
+                  if (!item.isRead) markAsRead(item.id);
+                  if (postUrl) {
+                    navigate(postUrl);
+                  }
+                };
+
+                return (
+                  <div
+                    key={item.id}
+                    onClick={handleCardClick}
+                    style={{
+                      background: item.isRead ? 'var(--bg-secondary)' : 'rgba(59, 130, 246, 0.04)',
+                      border: item.isRead ? '1px solid var(--border-color)' : '1px solid rgba(59, 130, 246, 0.3)',
+                      borderRadius: '12px',
+                      padding: '1.25rem',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '0.75rem',
+                      transition: 'all 0.2s ease',
+                      position: 'relative',
+                      cursor: postUrl || !item.isRead ? 'pointer' : 'default',
+                      width: '100%',
+                      boxSizing: 'border-box',
+                    }}
+                  >
+                    {/* Item Header */}
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '0.75rem', width: '100%' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                        <div
+                          style={{
+                            width: '40px',
+                            height: '40px',
+                            borderRadius: '50%',
+                            background: 'var(--accent-gradient)',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            color: '#fff',
+                            fontWeight: 700,
+                            fontSize: '1rem',
+                            flexShrink: 0,
+                          }}
+                        >
+                          {item.senderName ? item.senderName.charAt(0).toUpperCase() : 'N'}
+                        </div>
+                        <div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+                            <span style={{ fontWeight: 700, color: 'var(--text-primary)', fontSize: '0.95rem' }}>
+                              {item.senderName}
+                            </span>
+                            {getCategoryBadge(item.category)}
+                          </div>
+                          {postUrl ? (
+                            <a
+                              href={postUrl}
+                              onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                handleCardClick();
+                              }}
+                              style={{
+                                margin: '0.15rem 0 0 0',
+                                fontSize: '1rem',
+                                fontWeight: 600,
+                                color: 'var(--accent-primary)',
+                                textDecoration: 'none',
+                                cursor: 'pointer',
+                                display: 'inline-block',
+                              }}
+                              onMouseEnter={(e) => (e.currentTarget.style.textDecoration = 'underline')}
+                              onMouseLeave={(e) => (e.currentTarget.style.textDecoration = 'none')}
+                            >
+                              {item.title}
+                            </a>
+                          ) : (
+                            <h4 style={{ margin: '0.15rem 0 0 0', fontSize: '1rem', fontWeight: 600, color: 'var(--text-primary)' }}>
+                              {item.title}
+                            </h4>
+                          )}
+                        </div>
+                      </div>
+
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                        <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                          {formatTimestamp(item.createdAt)}
+                        </span>
+                        {!item.isRead && (
+                          <span
+                            title="Unread"
+                            style={{
+                              width: '10px',
+                              height: '10px',
+                              borderRadius: '50%',
+                              background: 'var(--accent-primary)',
+                              display: 'inline-block',
+                            }}
+                          />
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Main Message */}
+                    <p style={{ margin: 0, fontSize: '0.9rem', color: 'var(--text-secondary)', lineHeight: '1.45', width: '100%' }}>
+                      {item.message}
+                    </p>
+
+                    {/* Post Hyperlink */}
+                    {postUrl && (
+                      <div style={{ marginTop: '0.25rem' }}>
+                        <a
+                          href={postUrl}
+                          className="notification-post-link"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            handleCardClick();
+                          }}
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '0.4rem',
+                            color: 'var(--accent-primary)',
+                            fontSize: '0.875rem',
+                            fontWeight: 600,
+                            textDecoration: 'underline',
+                            cursor: 'pointer',
+                            padding: '0.2rem 0',
+                          }}
+                        >
+                          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path>
+                            <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path>
+                          </svg>
+                          <span>
+                            {isMyPost
+                              ? 'View Post in My Profile'
+                              : `View Post on ${item.senderName ? `${item.senderName}'s` : 'Business Partner'} Profile`}
+                          </span>
+                          <span>&rarr;</span>
+                        </a>
+                      </div>
+                    )}
+
+                    {/* Supplier Response Comment Highlight Box (Full Supplier Comments) */}
+                    {item.supplierComment && (
                       <div
                         style={{
-                          width: '40px',
-                          height: '40px',
-                          borderRadius: '50%',
-                          background: 'var(--accent-gradient)',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          color: '#fff',
-                          fontWeight: 700,
-                          fontSize: '1rem',
-                          flexShrink: 0,
+                          background: 'var(--bg-primary)',
+                          borderLeft: '4px solid var(--accent-primary)',
+                          padding: '0.85rem 1rem',
+                          borderRadius: '0 8px 8px 0',
+                          marginTop: '0.25rem',
+                          width: '100%',
+                          boxSizing: 'border-box',
                         }}
                       >
-                        {item.senderName ? item.senderName.charAt(0).toUpperCase() : 'N'}
+                        <span style={{ fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase', color: 'var(--accent-primary)', letterSpacing: '0.5px', display: 'block', marginBottom: '0.25rem' }}>
+                          Supplier Response Comments / Reason
+                        </span>
+                        <p style={{ margin: 0, fontSize: '0.875rem', color: 'var(--text-primary)', fontStyle: 'italic', wordBreak: 'break-word', whiteSpace: 'pre-wrap' }}>
+                          "{item.supplierComment}"
+                        </p>
                       </div>
-                      <div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
-                          <span style={{ fontWeight: 700, color: 'var(--text-primary)', fontSize: '0.95rem' }}>
-                            {item.senderName}
-                          </span>
-                          {getCategoryBadge(item.category)}
-                        </div>
-                        <h4 style={{ margin: '0.15rem 0 0 0', fontSize: '1rem', fontWeight: 600, color: 'var(--text-primary)' }}>
-                          {item.title}
-                        </h4>
-                      </div>
-                    </div>
+                    )}
 
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                      <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                        {formatTimestamp(item.createdAt)}
-                      </span>
-                      {!item.isRead && (
-                        <span
-                          title="Unread"
-                          style={{
-                            width: '10px',
-                            height: '10px',
-                            borderRadius: '50%',
-                            background: 'var(--accent-primary)',
-                            display: 'inline-block',
-                          }}
-                        />
-                      )}
-                    </div>
                   </div>
-
-                  {/* Main Message */}
-                  <p style={{ margin: 0, fontSize: '0.9rem', color: 'var(--text-secondary)', lineHeight: '1.45', width: '100%' }}>
-                    {item.message}
-                  </p>
-
-                  {/* Supplier Response Comment Highlight Box (Full Supplier Comments) */}
-                  {item.supplierComment && (
-                    <div
-                      style={{
-                        background: 'var(--bg-primary)',
-                        borderLeft: '4px solid var(--accent-primary)',
-                        padding: '0.85rem 1rem',
-                        borderRadius: '0 8px 8px 0',
-                        marginTop: '0.25rem',
-                        width: '100%',
-                        boxSizing: 'border-box',
-                      }}
-                    >
-                      <span style={{ fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase', color: 'var(--accent-primary)', letterSpacing: '0.5px', display: 'block', marginBottom: '0.25rem' }}>
-                        Supplier Response Comments / Reason
-                      </span>
-                      <p style={{ margin: 0, fontSize: '0.875rem', color: 'var(--text-primary)', fontStyle: 'italic', wordBreak: 'break-word', whiteSpace: 'pre-wrap' }}>
-                        "{item.supplierComment}"
-                      </p>
-                    </div>
-                  )}
-
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>
