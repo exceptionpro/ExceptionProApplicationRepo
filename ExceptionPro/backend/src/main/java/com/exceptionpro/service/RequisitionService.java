@@ -1,18 +1,5 @@
 package com.exceptionpro.service;
 
-import com.exceptionpro.dto.*;
-import com.exceptionpro.entity.Catalogue;
-import com.exceptionpro.entity.Requisition;
-import com.exceptionpro.entity.RequisitionItem;
-import com.exceptionpro.entity.User;
-import com.exceptionpro.entity.BusinessPartnerRequest;
-import com.exceptionpro.repository.BusinessPartnerRequestRepository;
-import com.exceptionpro.repository.CatalogueRepository;
-import com.exceptionpro.repository.RequisitionRepository;
-import com.exceptionpro.repository.UserRepository;
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
-
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -20,6 +7,23 @@ import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
+
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import com.exceptionpro.dto.CatalogueResponse;
+import com.exceptionpro.dto.RequisitionItemDto;
+import com.exceptionpro.dto.RequisitionRequest;
+import com.exceptionpro.dto.RequisitionResponse;
+import com.exceptionpro.dto.SupplierSummaryResponse;
+import com.exceptionpro.entity.BusinessPartnerRequest;
+import com.exceptionpro.entity.Requisition;
+import com.exceptionpro.entity.RequisitionItem;
+import com.exceptionpro.entity.User;
+import com.exceptionpro.repository.BusinessPartnerRequestRepository;
+import com.exceptionpro.repository.CatalogueRepository;
+import com.exceptionpro.repository.RequisitionRepository;
+import com.exceptionpro.repository.UserRepository;
 
 @Service
 @Transactional
@@ -86,6 +90,7 @@ public class RequisitionService {
                 item.setQuantity(itemDto.getQuantity() != null ? itemDto.getQuantity() : 1);
                 item.setUnitMeasure(itemDto.getUnitMeasure());
                 item.setPrice(itemDto.getPrice());
+                item.setCurrencyType(itemDto.getCurrencyType() != null && !itemDto.getCurrencyType().isBlank() ? itemDto.getCurrencyType().trim() : "USD");
 
                 if (itemDto.getSupplierId() != null) {
                     User itemSupplier = userRepository.findById(itemDto.getSupplierId()).orElse(null);
@@ -151,6 +156,7 @@ public class RequisitionService {
                 item.setQuantity(itemDto.getQuantity() != null ? itemDto.getQuantity() : 1);
                 item.setUnitMeasure(itemDto.getUnitMeasure());
                 item.setPrice(itemDto.getPrice());
+                item.setCurrencyType(itemDto.getCurrencyType() != null && !itemDto.getCurrencyType().isBlank() ? itemDto.getCurrencyType().trim() : "USD");
 
                 if (itemDto.getSupplierId() != null) {
                     User itemSupplier = userRepository.findById(itemDto.getSupplierId()).orElse(null);
@@ -212,17 +218,25 @@ public class RequisitionService {
         String poCode = String.format("PO%02d", reqNum);
 
         String buyerName = getUserDisplayName(buyer);
-        String productNames = (saved.getItems() != null && !saved.getItems().isEmpty())
-                ? saved.getItems().stream()
-                        .map(RequisitionItem::getProductName)
-                        .filter(p -> p != null && !p.isBlank())
-                        .distinct()
-                        .collect(Collectors.joining(", "))
-                : saved.getTitle();
-
-        String notificationMsg = "Buyer " + buyerName + " submitted a Purchase Order " + poCode + " for Product: " + productNames + ".";
 
         for (User targetSupplier : targetSuppliers) {
+            String productNames = (saved.getItems() != null && !saved.getItems().isEmpty())
+                    ? saved.getItems().stream()
+                            .filter(i -> i.getSupplier() == null
+                                    || (i.getSupplier() != null && i.getSupplier().getId().equals(targetSupplier.getId()))
+                                    || (saved.getSupplier() != null && saved.getSupplier().getId().equals(targetSupplier.getId())))
+                            .map(RequisitionItem::getProductName)
+                            .filter(p -> p != null && !p.isBlank())
+                            .distinct()
+                            .collect(Collectors.joining(", "))
+                    : saved.getTitle();
+
+            if (productNames == null || productNames.isBlank()) {
+                productNames = saved.getTitle() != null ? saved.getTitle() : "Product";
+            }
+
+            String notificationMsg = "Buyer " + buyerName + " submitted a Purchase Order " + poCode + " for Product: " + productNames + ".";
+
             notificationService.createNotification(
                     targetSupplier,
                     buyer,
@@ -277,26 +291,7 @@ public class RequisitionService {
         Requisition saved = requisitionRepository.save(requisition);
 
         // Send Notification to Buyer
-        String supplierName = getUserDisplayName(supplier);
-        String productNames = (saved.getItems() != null && !saved.getItems().isEmpty())
-                ? saved.getItems().stream()
-                        .map(RequisitionItem::getProductName)
-                        .filter(p -> p != null && !p.isBlank())
-                        .distinct()
-                        .collect(Collectors.joining(", "))
-                : saved.getTitle();
-
-        String msg = "Supplier " + supplierName + " accepted your requisition request '" + saved.getTitle() + "' for Product: " + productNames + ".";
-        notificationService.createNotification(
-                saved.getBuyer(),
-                supplier,
-                "REQUISITIONS",
-                "Requisition Request Accepted",
-                msg,
-                saved.getSupplierComment(),
-                saved.getId(),
-                "REQUISITION"
-        );
+        notificationService.sendOrUpdateBuyerPurchaseOrderNotification(saved, supplier, "Accepted");
 
         return mapToResponse(saved);
     }
@@ -326,26 +321,7 @@ public class RequisitionService {
         Requisition saved = requisitionRepository.save(requisition);
 
         // Send Notification to Buyer
-        String supplierName = getUserDisplayName(supplier);
-        String productNames = (saved.getItems() != null && !saved.getItems().isEmpty())
-                ? saved.getItems().stream()
-                        .map(RequisitionItem::getProductName)
-                        .filter(p -> p != null && !p.isBlank())
-                        .distinct()
-                        .collect(Collectors.joining(", "))
-                : saved.getTitle();
-
-        String msg = "Supplier " + supplierName + " declined your requisition request '" + saved.getTitle() + "' for Product: " + productNames + ".";
-        notificationService.createNotification(
-                saved.getBuyer(),
-                supplier,
-                "REQUISITIONS",
-                "Requisition Request Declined",
-                msg,
-                saved.getSupplierComment(),
-                saved.getId(),
-                "REQUISITION"
-        );
+        notificationService.sendOrUpdateBuyerPurchaseOrderNotification(saved, supplier, "Declined");
 
         return mapToResponse(saved);
     }
@@ -411,6 +387,13 @@ public class RequisitionService {
         if (request.getNeedByDate() == null) {
             throw new IllegalArgumentException("Need By Date is required");
         }
+        if (request.getSupplierId() != null && request.getItems() != null) {
+            for (RequisitionItemDto item : request.getItems()) {
+                if (item.getSupplierId() != null && !item.getSupplierId().equals(request.getSupplierId())) {
+                    throw new IllegalArgumentException("The Supplier which was selected in Requisition form should match with item Supplier.");
+                }
+            }
+        }
     }
 
     private RequisitionResponse mapToResponse(Requisition r) {
@@ -424,6 +407,7 @@ public class RequisitionService {
                         item.getQuantity(),
                         item.getUnitMeasure(),
                         item.getPrice(),
+                        item.getCurrencyType() != null ? item.getCurrencyType() : "USD",
                         item.getSupplier() != null ? item.getSupplier().getId() : null,
                         item.getSupplier() != null ? getUserDisplayName(item.getSupplier()) : null
                 ))
