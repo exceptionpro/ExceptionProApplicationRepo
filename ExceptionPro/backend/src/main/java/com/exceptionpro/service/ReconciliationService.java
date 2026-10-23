@@ -101,12 +101,12 @@ public class ReconciliationService {
 
         Requisition req = null;
         if (request.getRequisitionId() != null) {
-            req = requisitionRepository.findById(request.getRequisitionId()).orElse(null);
+            req = requisitionRepository.findById(Objects.requireNonNull(request.getRequisitionId())).orElse(null);
         }
 
         User supplier = null;
         if (request.getSupplierId() != null) {
-            supplier = userRepository.findById(request.getSupplierId()).orElse(null);
+            supplier = userRepository.findById(Objects.requireNonNull(request.getSupplierId())).orElse(null);
         } else if (req != null && req.getSupplier() != null) {
             supplier = req.getSupplier();
         }

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import LeftNavigation from '../components/LeftNavigation';
 import api from '../services/api';
+import { useAuth } from '../context/AuthContext';
 
 interface CollaborationItem {
   id?: string;
@@ -10,6 +11,7 @@ interface CollaborationItem {
   quantity: number;
   unitMeasure: string;
   price: number;
+  currencyType?: string;
 }
 
 interface SupplierProposal {
@@ -20,6 +22,8 @@ interface SupplierProposal {
   proposalText: string;
   evaluationStatus: string;
   createdAt: string;
+  fileUrl?: string;
+  fileName?: string;
 }
 
 interface CollaborationRequisitionData {
@@ -36,14 +40,34 @@ interface CollaborationRequisitionData {
   buyerName: string;
   items: CollaborationItem[];
   proposals: SupplierProposal[];
+  purchaseOrders?: any[];
+  currentSupplierStatus?: string;
+  purchaseOrderGenerated?: boolean;
+  suppliers?: Array<{ id: string; email: string; name: string }>;
+  acceptedSuppliers?: Array<{ id: string; email: string; name: string }>;
 }
 
 const CollaborationRequestNotificationPage: React.FC = () => {
+  const { user } = useAuth();
   const [requests, setRequests] = useState<CollaborationRequisitionData[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string>('');
   const [success, setSuccess] = useState<string>('');
   const [modalError, setModalError] = useState<string>('');
+
+  const checkIsPoGenerated = (req: CollaborationRequisitionData): boolean => {
+    if (req.currentSupplierStatus === 'Purchase Order Generated') return true;
+    const myEmail = user?.email || localStorage.getItem('email');
+    if (req.purchaseOrders && req.purchaseOrders.length > 0) {
+      if (myEmail) {
+        return req.purchaseOrders.some((po: any) =>
+          po.supplierEmail && po.supplierEmail.toLowerCase() === myEmail.toLowerCase()
+        );
+      }
+      return true;
+    }
+    return Boolean(req.purchaseOrderGenerated && req.status === 'Purchase Order Generated');
+  };
 
   // Accept Modal State
   const [acceptModalReq, setAcceptModalReq] = useState<CollaborationRequisitionData | null>(null);
@@ -56,6 +80,22 @@ const CollaborationRequestNotificationPage: React.FC = () => {
   // Proposal Modal State
   const [proposalModalReq, setProposalModalReq] = useState<CollaborationRequisitionData | null>(null);
   const [proposalText, setProposalText] = useState('');
+  const [proposalFile, setProposalFile] = useState<File | null>(null);
+  const [proposalUploading, setProposalUploading] = useState<boolean>(false);
+
+  const ALLOWED_PROPOSAL_FILE_EXTENSIONS = ['.docx', '.xlsx', '.txt', '.pdf'];
+  const MAX_PROPOSAL_FILE_SIZE = 10 * 1024 * 1024; // 10 MB
+
+  const getFileUrl = (url?: string) => {
+    if (!url) return '';
+    const normalizedUrl = url.replace(/\\/g, '/');
+    if (normalizedUrl.startsWith('/uploads/') || normalizedUrl.startsWith('uploads/')) {
+      const cleanUrl = normalizedUrl.startsWith('/') ? normalizedUrl : '/' + normalizedUrl;
+      const baseUrl = api.defaults.baseURL || 'http://localhost:9090';
+      return `${baseUrl}${cleanUrl}`;
+    }
+    return normalizedUrl;
+  };
 
   // Details Modal State
   const [viewingReq, setViewingReq] = useState<CollaborationRequisitionData | null>(null);
@@ -141,7 +181,29 @@ const CollaborationRequestNotificationPage: React.FC = () => {
   const handleOpenProposalModal = (req: CollaborationRequisitionData) => {
     setProposalModalReq(req);
     setProposalText('');
+    setProposalFile(null);
     setModalError('');
+  };
+
+  const handleProposalFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setModalError('');
+    if (!e.target.files || e.target.files.length === 0) {
+      setProposalFile(null);
+      return;
+    }
+    const file = e.target.files[0];
+    const ext = file.name.substring(file.name.lastIndexOf('.')).toLowerCase();
+    if (!ALLOWED_PROPOSAL_FILE_EXTENSIONS.includes(ext)) {
+      setModalError(`Invalid file format. Allowed formats are: ${ALLOWED_PROPOSAL_FILE_EXTENSIONS.join(', ')}`);
+      e.target.value = '';
+      return;
+    }
+    if (file.size > MAX_PROPOSAL_FILE_SIZE) {
+      setModalError('File size exceeds the 10 MB limit. Please select a smaller file.');
+      e.target.value = '';
+      return;
+    }
+    setProposalFile(file);
   };
 
   const handleSendProposal = async () => {
@@ -155,21 +217,61 @@ const CollaborationRequestNotificationPage: React.FC = () => {
     setSuccess('');
     setModalError('');
     try {
+      setProposalUploading(true);
+      let uploadedFileUrl: string | undefined = undefined;
+      let originalFileName: string | undefined = undefined;
+
+      if (proposalFile) {
+        const formData = new FormData();
+        formData.append('file', proposalFile);
+        const uploadRes = await api.post('/api/upload', formData, {
+          headers: { 'Content-Type': 'multipart/form-data' },
+        });
+        uploadedFileUrl = uploadRes.data?.fileUrl;
+        originalFileName = proposalFile.name;
+      }
+
       await api.post(`/api/collaboration-requisitions/${proposalModalReq.id}/proposal`, {
         proposalText: proposalText.trim(),
+        fileUrl: uploadedFileUrl,
+        fileName: originalFileName,
       });
+
       setSuccess('Supplier Proposal sent successfully to Buyer!');
       setProposalModalReq(null);
       setProposalText('');
+      setProposalFile(null);
       fetchSupplierCollaborationRequests();
     } catch (err: any) {
       const msg = err.response?.data?.message || 'Failed to send supplier proposal';
       setModalError(msg);
       setError(msg);
+    } finally {
+      setProposalUploading(false);
     }
   };
 
   const getSupplierStatusBadge = (req: CollaborationRequisitionData) => {
+    if (checkIsPoGenerated(req)) {
+      return (
+        <span
+          className="badge"
+          style={{
+            background: 'rgba(59, 130, 246, 0.2)',
+            color: '#3b82f6',
+            border: '1px solid rgba(59, 130, 246, 0.4)',
+            padding: '0.25rem 0.6rem',
+            borderRadius: '4px',
+            fontWeight: 600,
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '0.3rem',
+          }}
+        >
+          <span>📦</span> Purchase Order Generated
+        </span>
+      );
+    }
     const hasAcceptedProposal = req.proposals && req.proposals.some((p) => p.evaluationStatus === 'Accepted');
     if (hasAcceptedProposal) {
       return <span className="badge" style={{ background: 'rgba(16, 185, 129, 0.2)', color: '#10b981', padding: '0.25rem 0.6rem', borderRadius: '4px', fontWeight: 600 }}>Accepted</span>;
@@ -185,7 +287,7 @@ const CollaborationRequestNotificationPage: React.FC = () => {
       <LeftNavigation activePage="collaboration-request-notification" />
 
       <main style={{ flex: 1, width: '100%', maxWidth: '100%', display: 'flex', flexDirection: 'column', gap: '2rem' }}>
-        
+
         <div className="glass-card glass-card-lg" style={{ padding: '2rem', width: '100%', maxWidth: 'none' }}>
           <h2 className="card-title" style={{ fontSize: '1.5rem', marginBottom: '0.5rem' }}>Collaboration Requests</h2>
           <p className="card-subtitle" style={{ marginBottom: '1.5rem' }}>Review collaboration requisition requests submitted by Buyers and submit proposals</p>
@@ -268,92 +370,142 @@ const CollaborationRequestNotificationPage: React.FC = () => {
                     </div>
                   </div>
 
-                  {/* Display existing proposals sent for this request */}
-                  {req.proposals && req.proposals.length > 0 && (
-                    <div style={{ background: 'var(--glass-bg)', padding: '0.75rem', borderRadius: '8px', border: '1px solid var(--border-color)', fontSize: '0.85rem' }}>
-                      <strong style={{ color: 'var(--accent-primary)', display: 'block', marginBottom: '0.25rem' }}>Proposals Sent:</strong>
-                      {req.proposals.map((p) => (
-                        <div key={p.id} style={{ marginBottom: '0.25rem', color: 'var(--text-primary)' }}>
-                          • "{p.proposalText}" — Status: <strong style={{ color: p.evaluationStatus === 'Accepted' ? '#10b981' : '#f59e0b' }}>{p.evaluationStatus || 'Need to Evaluate'}</strong> <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>({new Date(p.createdAt).toLocaleDateString()})</span>
-                        </div>
-                      ))}
-                    </div>
-                  )}
+                  {/* Display existing proposals sent for this request - only for current supplier */}
+                  {(() => {
+                    const myEmail = (user?.email || localStorage.getItem('email') || '').toLowerCase();
+                    const myProposals = (req.proposals || []).filter(
+                      (p) => myEmail && p.supplierEmail && p.supplierEmail.toLowerCase() === myEmail
+                    );
+                    if (myProposals.length === 0) return null;
 
-                  {/* Action Buttons: Accept, Decline, Proposal */}
-                  <div
-                    style={{
-                      display: 'flex',
-                      gap: '0.75rem',
-                      alignItems: 'center',
-                      paddingTop: '0.85rem',
-                      borderTop: '1px solid var(--border-color)',
-                      marginTop: '0.25rem',
-                      flexWrap: 'wrap',
-                    }}
-                  >
-                    <button
-                      className="btn"
-                      style={{
-                        padding: '0.45rem 1.25rem',
-                        fontSize: '0.85rem',
-                        background: '#10b981',
-                        color: '#fff',
-                        border: 'none',
-                        borderRadius: '6px',
-                        cursor: 'pointer',
-                        fontWeight: 600,
-                      }}
-                      onClick={() => handleOpenAcceptModal(req)}
-                    >
-                      Accept
-                    </button>
-                    <button
-                      className="btn"
-                      style={{
-                        padding: '0.45rem 1.25rem',
-                        fontSize: '0.85rem',
-                        background: '#ef4444',
-                        color: '#fff',
-                        border: 'none',
-                        borderRadius: '6px',
-                        cursor: 'pointer',
-                        fontWeight: 600,
-                      }}
-                      onClick={() => handleOpenDeclineModal(req)}
-                    >
-                      Decline
-                    </button>
-                    <button
-                      className="btn btn-secondary"
-                      style={{
-                        padding: '0.45rem 1.25rem',
-                        fontSize: '0.85rem',
-                        width: 'auto',
-                        margin: 0,
-                        fontWeight: 600,
-                        background: 'var(--accent-glow)',
-                        color: 'var(--accent-primary)',
-                        borderColor: 'var(--accent-primary)',
-                      }}
-                      onClick={() => handleOpenProposalModal(req)}
-                    >
-                      Proposal
-                    </button>
-                    <button
-                      className="btn btn-secondary"
-                      style={{
-                        padding: '0.45rem 1.25rem',
-                        fontSize: '0.85rem',
-                        width: 'auto',
-                        margin: 0,
-                        fontWeight: 600,
-                      }}
-                      onClick={() => setViewingReq(req)}
-                    >
-                      View Items
-                    </button>
-                  </div>
+                    return (
+                      <div style={{ background: 'var(--glass-bg)', padding: '0.75rem', borderRadius: '8px', border: '1px solid var(--border-color)', fontSize: '0.85rem' }}>
+                        <strong style={{ color: 'var(--accent-primary)', display: 'block', marginBottom: '0.25rem' }}>Proposals Sent:</strong>
+                        {myProposals.map((p) => (
+                          <div key={p.id} style={{ marginBottom: '0.25rem', color: 'var(--text-primary)' }}>
+                            • "{p.proposalText}" — Status: <strong style={{ color: p.evaluationStatus === 'Accepted' ? '#10b981' : p.evaluationStatus === 'Declined' ? '#ef4444' : '#f59e0b' }}>{p.evaluationStatus || 'Need to Evaluate'}</strong> <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>({new Date(p.createdAt).toLocaleDateString()})</span>
+                            {p.fileUrl && (
+                              <a
+                                href={getFileUrl(p.fileUrl)}
+                                download={p.fileName || 'proposal-attachment'}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                style={{
+                                  marginLeft: '0.5rem',
+                                  color: 'var(--accent-primary, #6366f1)',
+                                  textDecoration: 'underline',
+                                  fontSize: '0.8rem',
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '0.2rem',
+                                }}
+                              >
+                                📎 {p.fileName || 'Attachment'}
+                              </a>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    );
+                  })()}
+
+                  {/* Action Buttons: Accept, Decline, Proposal, View Items */}
+                  {(() => {
+                    const isPoGen = checkIsPoGenerated(req);
+                    return (
+                      <div
+                        style={{
+                          display: 'flex',
+                          gap: '0.75rem',
+                          alignItems: 'center',
+                          paddingTop: '0.85rem',
+                          borderTop: '1px solid var(--border-color)',
+                          marginTop: '0.25rem',
+                          flexWrap: 'wrap',
+                        }}
+                      >
+                        <button
+                          className="btn"
+                          disabled={isPoGen}
+                          style={{
+                            padding: '0.45rem 1.25rem',
+                            fontSize: '0.85rem',
+                            background: isPoGen ? 'var(--bg-tertiary, #4b5563)' : '#10b981',
+                            color: isPoGen ? 'var(--text-muted, #9ca3af)' : '#fff',
+                            border: isPoGen ? '1px solid var(--border-color, #6b7280)' : 'none',
+                            borderRadius: '6px',
+                            cursor: isPoGen ? 'not-allowed' : 'pointer',
+                            fontWeight: 600,
+                            opacity: isPoGen ? 0.6 : 1,
+                          }}
+                          onClick={() => !isPoGen && handleOpenAcceptModal(req)}
+                          title={isPoGen ? 'Purchase Order has already been generated' : 'Accept Request'}
+                        >
+                          Accept
+                        </button>
+                        <button
+                          className="btn"
+                          disabled={isPoGen}
+                          style={{
+                            padding: '0.45rem 1.25rem',
+                            fontSize: '0.85rem',
+                            background: isPoGen ? 'var(--bg-tertiary, #4b5563)' : '#ef4444',
+                            color: isPoGen ? 'var(--text-muted, #9ca3af)' : '#fff',
+                            border: isPoGen ? '1px solid var(--border-color, #6b7280)' : 'none',
+                            borderRadius: '6px',
+                            cursor: isPoGen ? 'not-allowed' : 'pointer',
+                            fontWeight: 600,
+                            opacity: isPoGen ? 0.6 : 1,
+                          }}
+                          onClick={() => !isPoGen && handleOpenDeclineModal(req)}
+                          title={isPoGen ? 'Purchase Order has already been generated' : 'Decline Request'}
+                        >
+                          Decline
+                        </button>
+                        <button
+                          className="btn btn-secondary"
+                          disabled={isPoGen}
+                          style={{
+                            padding: '0.45rem 1.25rem',
+                            fontSize: '0.85rem',
+                            width: 'auto',
+                            margin: 0,
+                            fontWeight: 600,
+                            background: isPoGen ? 'var(--bg-tertiary, #4b5563)' : 'var(--accent-glow)',
+                            color: isPoGen ? 'var(--text-muted, #9ca3af)' : 'var(--accent-primary)',
+                            borderColor: isPoGen ? 'var(--border-color, #6b7280)' : 'var(--accent-primary)',
+                            cursor: isPoGen ? 'not-allowed' : 'pointer',
+                            opacity: isPoGen ? 0.6 : 1,
+                          }}
+                          onClick={() => !isPoGen && handleOpenProposalModal(req)}
+                          title={isPoGen ? 'Purchase Order has already been generated' : 'Submit Proposal'}
+                        >
+                          Proposal
+                        </button>
+                        <button
+                          className="btn btn-secondary"
+                          disabled={false}
+                          style={{
+                            padding: '0.45rem 1.25rem',
+                            fontSize: '0.85rem',
+                            width: 'auto',
+                            margin: 0,
+                            fontWeight: 600,
+                            cursor: 'pointer',
+                          }}
+                          onClick={() => setViewingReq(req)}
+                        >
+                          View Items
+                        </button>
+
+                        {isPoGen && (
+                          <span style={{ fontSize: '0.8rem', color: '#3b82f6', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '0.35rem', marginLeft: 'auto' }}>
+                            ✓ Purchase Order Generated by Buyer
+                          </span>
+                        )}
+                      </div>
+                    );
+                  })()}
                 </div>
               ))}
             </div>
@@ -465,7 +617,7 @@ const CollaborationRequestNotificationPage: React.FC = () => {
               <label className="form-label">Proposal Comments / Content *</label>
               <textarea
                 className="form-input"
-                rows={6}
+                rows={5}
                 placeholder="Enter mandatory proposal comments, detailed proposal terms, pricing adjustments, delivery timeframe, etc."
                 value={proposalText}
                 onChange={(e) => setProposalText(e.target.value)}
@@ -473,11 +625,104 @@ const CollaborationRequestNotificationPage: React.FC = () => {
               />
             </div>
 
+            {/* Optional File Attachment */}
+            <div className="form-group" style={{ marginTop: '1rem' }}>
+              <label className="form-label" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span>Attach Proposal Document <span style={{ color: 'var(--text-muted)', fontSize: '0.8rem', fontWeight: 400 }}>(Optional - Max 10 MB)</span></span>
+                <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>.docx, .xlsx, .txt, .pdf</span>
+              </label>
+
+              <div
+                style={{
+                  border: '1px dashed var(--border-color, #475569)',
+                  borderRadius: '8px',
+                  padding: '1rem',
+                  background: 'var(--bg-secondary, rgba(255, 255, 255, 0.02))',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '0.5rem',
+                }}
+              >
+                {!proposalFile ? (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                    <label
+                      className="btn btn-secondary"
+                      style={{
+                        cursor: 'pointer',
+                        padding: '0.4rem 0.85rem',
+                        fontSize: '0.82rem',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '0.35rem',
+                        margin: 0,
+                      }}
+                    >
+                      <span>📎</span> Choose File
+                      <input
+                        type="file"
+                        accept=".docx,.xlsx,.txt,.pdf"
+                        onChange={handleProposalFileChange}
+                        disabled={proposalUploading}
+                        style={{ display: 'none' }}
+                      />
+                    </label>
+                    <span style={{ fontSize: '0.82rem', color: 'var(--text-muted)' }}>
+                      No file chosen yet (formats: .docx, .xlsx, .txt, .pdf up to 10 MB)
+                    </span>
+                  </div>
+                ) : (
+                  <div
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      background: 'var(--bg-primary, #0f172a)',
+                      padding: '0.5rem 0.75rem',
+                      borderRadius: '6px',
+                      border: '1px solid var(--border-color, #334155)',
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', overflow: 'hidden' }}>
+                      <span style={{ fontSize: '1.2rem' }}>📄</span>
+                      <div>
+                        <div style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-primary)', wordBreak: 'break-all' }}>
+                          {proposalFile.name}
+                        </div>
+                        <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
+                          {(proposalFile.size / (1024 * 1024)).toFixed(2)} MB
+                        </div>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setProposalFile(null)}
+                      disabled={proposalUploading}
+                      style={{
+                        background: 'transparent',
+                        border: 'none',
+                        color: '#ef4444',
+                        cursor: 'pointer',
+                        fontSize: '0.8rem',
+                        fontWeight: 600,
+                        padding: '0.2rem 0.5rem',
+                      }}
+                    >
+                      ✕ Remove
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '1rem', marginTop: '1.5rem' }}>
               <button
                 type="button"
                 className="btn btn-secondary"
-                onClick={() => setProposalModalReq(null)}
+                onClick={() => {
+                  setProposalModalReq(null);
+                  setProposalFile(null);
+                }}
+                disabled={proposalUploading}
               >
                 Cancel
               </button>
@@ -485,8 +730,9 @@ const CollaborationRequestNotificationPage: React.FC = () => {
                 type="button"
                 className="btn btn-primary"
                 onClick={handleSendProposal}
+                disabled={proposalUploading}
               >
-                Send Proposal
+                {proposalUploading ? 'Sending...' : 'Send Proposal'}
               </button>
             </div>
           </div>
@@ -520,7 +766,7 @@ const CollaborationRequestNotificationPage: React.FC = () => {
                       <td style={{ padding: '0.5rem' }}>{item.fullDescription}</td>
                       <td style={{ padding: '0.5rem' }}>{item.quantity}</td>
                       <td style={{ padding: '0.5rem' }}>{item.unitMeasure}</td>
-                      <td style={{ padding: '0.5rem' }}>${item.price}</td>
+                      <td style={{ padding: '0.5rem' }}>{item.currencyType ? `${item.currencyType} ` : '$'}{item.price}</td>
                     </tr>
                   ))}
                 </tbody>

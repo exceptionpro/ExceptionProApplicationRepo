@@ -12,6 +12,7 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -56,11 +57,11 @@ public class InvoiceService {
         );
 
         for (Requisition r : standardAccepted) {
-            int num = r.getReqNumber() != null ? r.getReqNumber() : 1;
+            int num = (r.getReqNumber() != null) ? r.getReqNumber().intValue() : 1;
             String code = String.format("PO%02d", num);
             BigDecimal total = r.getItems() != null ? r.getItems().stream()
-                    .map(i -> i.getPrice() != null ? i.getPrice().multiply(BigDecimal.valueOf(i.getQuantity() != null ? i.getQuantity() : 1)) : BigDecimal.ZERO)
-                    .reduce(BigDecimal.ZERO, BigDecimal::add) : BigDecimal.ZERO;
+                    .map(i -> i.getPrice() != null ? i.getPrice().multiply(BigDecimal.valueOf(i.getQuantity() != null ? i.getQuantity().longValue() : 1L)) : BigDecimal.ZERO)
+                    .reduce(BigDecimal.ZERO, (a, b) -> a.add(b)) : BigDecimal.ZERO;
 
             list.add(new EligibleRequestResponse(
                     r.getId(),
@@ -85,8 +86,8 @@ public class InvoiceService {
                     .anyMatch(p -> "Accepted".equalsIgnoreCase(p.getEvaluationStatus()));
             if (isProposalAccepted) {
                 BigDecimal total = c.getItems() != null ? c.getItems().stream()
-                        .map(i -> i.getPrice() != null ? i.getPrice().multiply(BigDecimal.valueOf(i.getQuantity() != null ? i.getQuantity() : 1)) : BigDecimal.ZERO)
-                        .reduce(BigDecimal.ZERO, BigDecimal::add) : BigDecimal.ZERO;
+                        .map(i -> i.getPrice() != null ? i.getPrice().multiply(BigDecimal.valueOf(i.getQuantity() != null ? i.getQuantity().longValue() : 1L)) : BigDecimal.ZERO)
+                        .reduce(BigDecimal.ZERO, (a, b) -> a.add(b)) : BigDecimal.ZERO;
 
                 list.add(new EligibleRequestResponse(
                         c.getId(),
@@ -149,12 +150,14 @@ public class InvoiceService {
         invoice.setRequestType(requestType);
 
         String requestTitle = "";
-        String requestCode = "";
         User buyer = null;
 
         if ("COLLABORATION".equalsIgnoreCase(requestType) || request.getCollaborationRequisitionId() != null) {
             UUID collabId = request.getCollaborationRequisitionId() != null ? request.getCollaborationRequisitionId() : request.getRequisitionId();
-            CollaborationRequisition collab = collaborationRequisitionRepository.findById(collabId)
+            if (collabId == null) {
+                throw new IllegalArgumentException("Collaboration Requisition ID is required");
+            }
+            CollaborationRequisition collab = collaborationRequisitionRepository.findById(Objects.requireNonNull(collabId))
                     .orElseThrow(() -> new IllegalArgumentException("Collaboration Requisition not found"));
 
             boolean isAssigned = collab.getSuppliers() != null && collab.getSuppliers().stream()
@@ -175,13 +178,12 @@ public class InvoiceService {
             invoice.setRequestType("COLLABORATION");
             buyer = collab.getBuyer();
             requestTitle = collab.getTitle();
-            requestCode = "COLLAB";
         } else {
             UUID reqId = request.getRequisitionId();
             if (reqId == null) {
                 throw new IllegalArgumentException("Requisition ID is required");
             }
-            Requisition req = requisitionRepository.findById(reqId)
+            Requisition req = requisitionRepository.findById(Objects.requireNonNull(reqId))
                     .orElseThrow(() -> new IllegalArgumentException("Requisition not found"));
 
             if (!"Accepted".equalsIgnoreCase(req.getStatus())) {
@@ -196,8 +198,6 @@ public class InvoiceService {
             invoice.setRequestType("STANDARD");
             buyer = req.getBuyer();
             requestTitle = req.getTitle();
-            int num = req.getReqNumber() != null ? req.getReqNumber() : 1;
-            requestCode = String.format("PO%02d", num);
         }
 
         invoice.setBuyer(buyer);
@@ -233,7 +233,7 @@ public class InvoiceService {
         User supplier = userRepository.findByEmail(supplierEmail)
                 .orElseThrow(() -> new IllegalArgumentException("Supplier not found"));
 
-        Invoice invoice = invoiceRepository.findById(id)
+        Invoice invoice = invoiceRepository.findById(Objects.requireNonNull(id))
                 .orElseThrow(() -> new IllegalArgumentException("Invoice not found"));
 
         if (!invoice.getSupplier().getId().equals(supplier.getId())) {
@@ -290,14 +290,14 @@ public class InvoiceService {
         User supplier = userRepository.findByEmail(supplierEmail)
                 .orElseThrow(() -> new IllegalArgumentException("Supplier not found"));
 
-        Invoice invoice = invoiceRepository.findById(id)
+        Invoice invoice = invoiceRepository.findById(Objects.requireNonNull(id))
                 .orElseThrow(() -> new IllegalArgumentException("Invoice not found"));
 
         if (!invoice.getSupplier().getId().equals(supplier.getId())) {
             throw new IllegalArgumentException("You do not have permission to delete this invoice");
         }
 
-        invoiceRepository.delete(invoice);
+        invoiceRepository.delete(Objects.requireNonNull(invoice));
     }
 
     public List<InvoiceResponse> getBuyerInvoices(String buyerEmail) {
@@ -318,7 +318,7 @@ public class InvoiceService {
 
         if (inv.getRequisition() != null) {
             title = inv.getRequisition().getTitle();
-            int num = inv.getRequisition().getReqNumber() != null ? inv.getRequisition().getReqNumber() : 1;
+            int num = (inv.getRequisition().getReqNumber() != null) ? inv.getRequisition().getReqNumber().intValue() : 1;
             code = String.format("PO%02d", num);
         } else if (inv.getCollaborationRequisition() != null) {
             title = inv.getCollaborationRequisition().getTitle();

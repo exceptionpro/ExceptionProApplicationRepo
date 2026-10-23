@@ -11,11 +11,17 @@ public class CollaborationItemDto {
     private Integer quantity;
     private String unitMeasure;
     private BigDecimal price;
+    private String currencyType;
 
     public CollaborationItemDto() {}
 
     public CollaborationItemDto(UUID id, String itemType, String productName, String fullDescription,
                                 Integer quantity, String unitMeasure, BigDecimal price) {
+        this(id, itemType, productName, fullDescription, quantity, unitMeasure, price, "USD");
+    }
+
+    public CollaborationItemDto(UUID id, String itemType, String productName, String fullDescription,
+                                Integer quantity, String unitMeasure, BigDecimal price, String currencyType) {
         this.id = id;
         this.itemType = itemType;
         this.productName = productName;
@@ -23,6 +29,7 @@ public class CollaborationItemDto {
         this.quantity = quantity;
         this.unitMeasure = unitMeasure;
         this.price = price;
+        this.currencyType = currencyType;
     }
 
     public UUID getId() {
@@ -79,5 +86,13 @@ public class CollaborationItemDto {
 
     public void setPrice(BigDecimal price) {
         this.price = price;
+    }
+
+    public String getCurrencyType() {
+        return currencyType;
+    }
+
+    public void setCurrencyType(String currencyType) {
+        this.currencyType = currencyType;
     }
 }

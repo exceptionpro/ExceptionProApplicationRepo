@@ -7,6 +7,9 @@ public class SupplierSummaryResponse {
     private String email;
     private String name;
     private String accountType;
+    private String status;
+    private String poNumber;
+    private String comments;
 
     public SupplierSummaryResponse() {}
 
@@ -15,6 +18,25 @@ public class SupplierSummaryResponse {
         this.email = email;
         this.name = name;
         this.accountType = accountType;
+    }
+
+    public SupplierSummaryResponse(UUID id, String email, String name, String accountType, String status, String poNumber) {
+        this.id = id;
+        this.email = email;
+        this.name = name;
+        this.accountType = accountType;
+        this.status = status;
+        this.poNumber = poNumber;
+    }
+
+    public SupplierSummaryResponse(UUID id, String email, String name, String accountType, String status, String poNumber, String comments) {
+        this.id = id;
+        this.email = email;
+        this.name = name;
+        this.accountType = accountType;
+        this.status = status;
+        this.poNumber = poNumber;
+        this.comments = comments;
     }
 
     public UUID getId() {
@@ -47,5 +69,29 @@ public class SupplierSummaryResponse {
 
     public void setAccountType(String accountType) {
         this.accountType = accountType;
+    }
+
+    public String getStatus() {
+        return status;
+    }
+
+    public void setStatus(String status) {
+        this.status = status;
+    }
+
+    public String getPoNumber() {
+        return poNumber;
+    }
+
+    public void setPoNumber(String poNumber) {
+        this.poNumber = poNumber;
+    }
+
+    public String getComments() {
+        return comments;
+    }
+
+    public void setComments(String comments) {
+        this.comments = comments;
     }
 }

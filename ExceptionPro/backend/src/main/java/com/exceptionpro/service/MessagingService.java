@@ -34,7 +34,7 @@ public class MessagingService {
 
         User receiver = null;
         if (request.getReceiverId() != null) {
-            receiver = userRepository.findById(request.getReceiverId())
+            receiver = userRepository.findById(Objects.requireNonNull(request.getReceiverId()))
                     .orElse(null);
         }
         if (receiver == null && request.getReceiverEmail() != null && !request.getReceiverEmail().isBlank()) {
@@ -68,7 +68,7 @@ public class MessagingService {
         User partner = null;
         try {
             UUID partnerUuid = UUID.fromString(partnerEmailOrId);
-            partner = userRepository.findById(partnerUuid).orElse(null);
+            partner = userRepository.findById(Objects.requireNonNull(partnerUuid)).orElse(null);
         } catch (IllegalArgumentException e) {
             // Not a UUID, try email
         }

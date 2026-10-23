@@ -20,9 +20,14 @@ public class CollaborationRequisitionResponse {
     private String buyerName;
     private List<SupplierSummaryResponse> suppliers = new ArrayList<>();
     private List<SupplierSummaryResponse> acceptedSuppliers = new ArrayList<>();
+    private List<SupplierSummaryResponse> declinedSuppliers = new ArrayList<>();
     private int acceptedCount = 0;
     private List<CollaborationItemDto> items = new ArrayList<>();
     private List<CollaborationProposalDto> proposals = new ArrayList<>();
+    private List<RequisitionResponse> purchaseOrders = new ArrayList<>();
+    private String currentSupplierStatus;
+    private boolean purchaseOrderGenerated;
+    private String poNumber;
 
     public CollaborationRequisitionResponse() {}
 
@@ -33,6 +38,17 @@ public class CollaborationRequisitionResponse {
                                             List<SupplierSummaryResponse> acceptedSuppliers, int acceptedCount,
                                             List<CollaborationItemDto> items,
                                             List<CollaborationProposalDto> proposals) {
+        this(id, title, shipTo, deliverTo, needByDate, comments, status, createdAt, buyerId, buyerEmail, buyerName, suppliers, acceptedSuppliers, acceptedCount, items, proposals, new ArrayList<>());
+    }
+
+    public CollaborationRequisitionResponse(UUID id, String title, String shipTo, String deliverTo,
+                                            LocalDate needByDate, String comments, String status,
+                                            LocalDateTime createdAt, UUID buyerId, String buyerEmail,
+                                            String buyerName, List<SupplierSummaryResponse> suppliers,
+                                            List<SupplierSummaryResponse> acceptedSuppliers, int acceptedCount,
+                                            List<CollaborationItemDto> items,
+                                            List<CollaborationProposalDto> proposals,
+                                            List<RequisitionResponse> purchaseOrders) {
         this.id = id;
         this.title = title;
         this.shipTo = shipTo;
@@ -49,6 +65,7 @@ public class CollaborationRequisitionResponse {
         this.acceptedCount = acceptedCount;
         this.items = items;
         this.proposals = proposals;
+        this.purchaseOrders = purchaseOrders != null ? purchaseOrders : new ArrayList<>();
     }
 
     public List<SupplierSummaryResponse> getAcceptedSuppliers() {
@@ -177,5 +194,45 @@ public class CollaborationRequisitionResponse {
 
     public void setProposals(List<CollaborationProposalDto> proposals) {
         this.proposals = proposals;
+    }
+
+    public List<RequisitionResponse> getPurchaseOrders() {
+        return purchaseOrders;
+    }
+
+    public void setPurchaseOrders(List<RequisitionResponse> purchaseOrders) {
+        this.purchaseOrders = purchaseOrders;
+    }
+
+    public String getCurrentSupplierStatus() {
+        return currentSupplierStatus;
+    }
+
+    public void setCurrentSupplierStatus(String currentSupplierStatus) {
+        this.currentSupplierStatus = currentSupplierStatus;
+    }
+
+    public boolean isPurchaseOrderGenerated() {
+        return purchaseOrderGenerated;
+    }
+
+    public void setPurchaseOrderGenerated(boolean purchaseOrderGenerated) {
+        this.purchaseOrderGenerated = purchaseOrderGenerated;
+    }
+
+    public String getPoNumber() {
+        return poNumber;
+    }
+
+    public void setPoNumber(String poNumber) {
+        this.poNumber = poNumber;
+    }
+
+    public List<SupplierSummaryResponse> getDeclinedSuppliers() {
+        return declinedSuppliers;
+    }
+
+    public void setDeclinedSuppliers(List<SupplierSummaryResponse> declinedSuppliers) {
+        this.declinedSuppliers = declinedSuppliers;
     }
 }

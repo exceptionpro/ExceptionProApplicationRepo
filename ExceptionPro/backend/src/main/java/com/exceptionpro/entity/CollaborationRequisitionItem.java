@@ -33,6 +33,9 @@ public class CollaborationRequisitionItem {
     @Column(nullable = false)
     private BigDecimal price;
 
+    @Column(name = "currency_type")
+    private String currencyType = "USD";
+
     public UUID getId() {
         return id;
     }
@@ -95,5 +98,13 @@ public class CollaborationRequisitionItem {
 
     public void setPrice(BigDecimal price) {
         this.price = price;
+    }
+
+    public String getCurrencyType() {
+        return currencyType;
+    }
+
+    public void setCurrencyType(String currencyType) {
+        this.currencyType = currencyType;
     }
 }

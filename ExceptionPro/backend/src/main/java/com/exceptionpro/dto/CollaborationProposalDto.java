@@ -11,11 +11,19 @@ public class CollaborationProposalDto {
     private String proposalText;
     private String evaluationStatus;
     private LocalDateTime createdAt;
+    private String fileUrl;
+    private String fileName;
 
     public CollaborationProposalDto() {}
 
     public CollaborationProposalDto(UUID id, UUID supplierId, String supplierEmail, String supplierName,
                                    String proposalText, String evaluationStatus, LocalDateTime createdAt) {
+        this(id, supplierId, supplierEmail, supplierName, proposalText, evaluationStatus, createdAt, null, null);
+    }
+
+    public CollaborationProposalDto(UUID id, UUID supplierId, String supplierEmail, String supplierName,
+                                   String proposalText, String evaluationStatus, LocalDateTime createdAt,
+                                   String fileUrl, String fileName) {
         this.id = id;
         this.supplierId = supplierId;
         this.supplierEmail = supplierEmail;
@@ -23,6 +31,8 @@ public class CollaborationProposalDto {
         this.proposalText = proposalText;
         this.evaluationStatus = evaluationStatus;
         this.createdAt = createdAt;
+        this.fileUrl = fileUrl;
+        this.fileName = fileName;
     }
 
     public String getEvaluationStatus() {
@@ -79,5 +89,21 @@ public class CollaborationProposalDto {
 
     public void setCreatedAt(LocalDateTime createdAt) {
         this.createdAt = createdAt;
+    }
+
+    public String getFileUrl() {
+        return fileUrl;
+    }
+
+    public void setFileUrl(String fileUrl) {
+        this.fileUrl = fileUrl;
+    }
+
+    public String getFileName() {
+        return fileName;
+    }
+
+    public void setFileName(String fileName) {
+        this.fileName = fileName;
     }
 }

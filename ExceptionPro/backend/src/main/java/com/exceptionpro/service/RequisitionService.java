@@ -4,6 +4,7 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -72,7 +73,7 @@ public class RequisitionService {
         requisition.setReqNumber((maxReq == null) ? 1 : maxReq + 1);
 
         if (request.getSupplierId() != null) {
-            User supplier = userRepository.findById(request.getSupplierId())
+            User supplier = userRepository.findById(Objects.requireNonNull(request.getSupplierId()))
                     .orElse(null);
             requisition.setSupplier(supplier);
         }
@@ -87,13 +88,13 @@ public class RequisitionService {
                 item.setCatalogueId(itemDto.getCatalogueId());
                 item.setProductName(itemDto.getProductName());
                 item.setFullDescription(itemDto.getFullDescription());
-                item.setQuantity(itemDto.getQuantity() != null ? itemDto.getQuantity() : 1);
+                item.setQuantity(itemDto.getQuantity() != null ? itemDto.getQuantity().intValue() : 1);
                 item.setUnitMeasure(itemDto.getUnitMeasure());
                 item.setPrice(itemDto.getPrice());
                 item.setCurrencyType(itemDto.getCurrencyType() != null && !itemDto.getCurrencyType().isBlank() ? itemDto.getCurrencyType().trim() : "USD");
 
                 if (itemDto.getSupplierId() != null) {
-                    User itemSupplier = userRepository.findById(itemDto.getSupplierId()).orElse(null);
+                    User itemSupplier = userRepository.findById(Objects.requireNonNull(itemDto.getSupplierId())).orElse(null);
                     item.setSupplier(itemSupplier);
                     if (requisition.getSupplier() == null) {
                         requisition.setSupplier(itemSupplier);
@@ -123,11 +124,15 @@ public class RequisitionService {
         User buyer = userRepository.findByEmail(buyerEmail)
                 .orElseThrow(() -> new IllegalArgumentException("User not found"));
 
-        Requisition requisition = requisitionRepository.findById(id)
+        Requisition requisition = requisitionRepository.findById(Objects.requireNonNull(id))
                 .orElseThrow(() -> new IllegalArgumentException("Requisition not found"));
 
         if (!requisition.getBuyer().getId().equals(buyer.getId())) {
             throw new IllegalArgumentException("You can only edit your own requisitions");
+        }
+
+        if ("PO".equalsIgnoreCase(requisition.getStatus())) {
+            throw new IllegalArgumentException("Cannot edit a requisition that has already been converted to Purchase Order (PO)");
         }
 
         validateRequisitionRequest(request);
@@ -139,7 +144,7 @@ public class RequisitionService {
         requisition.setComments(request.getComments());
 
         if (request.getSupplierId() != null) {
-            User supplier = userRepository.findById(request.getSupplierId()).orElse(null);
+            User supplier = userRepository.findById(Objects.requireNonNull(request.getSupplierId())).orElse(null);
             requisition.setSupplier(supplier);
         }
 
@@ -153,13 +158,13 @@ public class RequisitionService {
                 item.setCatalogueId(itemDto.getCatalogueId());
                 item.setProductName(itemDto.getProductName());
                 item.setFullDescription(itemDto.getFullDescription());
-                item.setQuantity(itemDto.getQuantity() != null ? itemDto.getQuantity() : 1);
+                item.setQuantity(itemDto.getQuantity() != null ? itemDto.getQuantity().intValue() : 1);
                 item.setUnitMeasure(itemDto.getUnitMeasure());
                 item.setPrice(itemDto.getPrice());
                 item.setCurrencyType(itemDto.getCurrencyType() != null && !itemDto.getCurrencyType().isBlank() ? itemDto.getCurrencyType().trim() : "USD");
 
                 if (itemDto.getSupplierId() != null) {
-                    User itemSupplier = userRepository.findById(itemDto.getSupplierId()).orElse(null);
+                    User itemSupplier = userRepository.findById(Objects.requireNonNull(itemDto.getSupplierId())).orElse(null);
                     item.setSupplier(itemSupplier);
                     if (requisition.getSupplier() == null) {
                         requisition.setSupplier(itemSupplier);
@@ -177,21 +182,25 @@ public class RequisitionService {
         User buyer = userRepository.findByEmail(buyerEmail)
                 .orElseThrow(() -> new IllegalArgumentException("User not found"));
 
-        Requisition requisition = requisitionRepository.findById(id)
+        Requisition requisition = requisitionRepository.findById(Objects.requireNonNull(id))
                 .orElseThrow(() -> new IllegalArgumentException("Requisition not found"));
 
         if (!requisition.getBuyer().getId().equals(buyer.getId())) {
             throw new IllegalArgumentException("You can only delete your own requisitions");
         }
 
-        requisitionRepository.delete(requisition);
+        if ("PO".equalsIgnoreCase(requisition.getStatus())) {
+            throw new IllegalArgumentException("Cannot delete a requisition that has already been converted to Purchase Order (PO)");
+        }
+
+        requisitionRepository.delete(Objects.requireNonNull(requisition));
     }
 
     public RequisitionResponse convertToPo(UUID id, String buyerEmail) {
         User buyer = userRepository.findByEmail(buyerEmail)
                 .orElseThrow(() -> new IllegalArgumentException("User not found"));
 
-        Requisition requisition = requisitionRepository.findById(id)
+        Requisition requisition = requisitionRepository.findById(Objects.requireNonNull(id))
                 .orElseThrow(() -> new IllegalArgumentException("Requisition not found"));
 
         if (!requisition.getBuyer().getId().equals(buyer.getId())) {
@@ -214,7 +223,7 @@ public class RequisitionService {
             }
         }
 
-        int reqNum = saved.getReqNumber() != null ? saved.getReqNumber() : 1;
+        int reqNum = (saved.getReqNumber() != null) ? saved.getReqNumber().intValue() : 1;
         String poCode = String.format("PO%02d", reqNum);
 
         String buyerName = getUserDisplayName(buyer);
@@ -225,7 +234,7 @@ public class RequisitionService {
                             .filter(i -> i.getSupplier() == null
                                     || (i.getSupplier() != null && i.getSupplier().getId().equals(targetSupplier.getId()))
                                     || (saved.getSupplier() != null && saved.getSupplier().getId().equals(targetSupplier.getId())))
-                            .map(RequisitionItem::getProductName)
+                            .map(i -> i != null ? i.getProductName() : null)
                             .filter(p -> p != null && !p.isBlank())
                             .distinct()
                             .collect(Collectors.joining(", "))
@@ -274,7 +283,7 @@ public class RequisitionService {
         User supplier = userRepository.findByEmail(supplierEmail)
                 .orElseThrow(() -> new IllegalArgumentException("User not found"));
 
-        Requisition requisition = requisitionRepository.findById(id)
+        Requisition requisition = requisitionRepository.findById(Objects.requireNonNull(id))
                 .orElseThrow(() -> new IllegalArgumentException("Requisition not found"));
 
         if (requisition.getSupplier() == null || !requisition.getSupplier().getId().equals(supplier.getId())) {
@@ -304,7 +313,7 @@ public class RequisitionService {
         User supplier = userRepository.findByEmail(supplierEmail)
                 .orElseThrow(() -> new IllegalArgumentException("User not found"));
 
-        Requisition requisition = requisitionRepository.findById(id)
+        Requisition requisition = requisitionRepository.findById(Objects.requireNonNull(id))
                 .orElseThrow(() -> new IllegalArgumentException("Requisition not found"));
 
         if (requisition.getSupplier() == null || !requisition.getSupplier().getId().equals(supplier.getId())) {
@@ -336,7 +345,7 @@ public class RequisitionService {
                 .map(r -> r.getSender().getId().equals(buyer.getId()) ? r.getReceiver() : r.getSender())
                 .filter(u -> u != null && u.getAccountType() != null &&
                         (u.getAccountType().equalsIgnoreCase("Supplier") || u.getAccountType().equalsIgnoreCase("Buyer and Supplier")))
-                .collect(Collectors.toMap(User::getId, u -> u, (u1, u2) -> u1))
+                .collect(Collectors.toMap(u -> u.getId(), u -> u, (u1, u2) -> u1))
                 .values().stream()
                 .map(u -> new SupplierSummaryResponse(
                         u.getId(),
@@ -359,7 +368,7 @@ public class RequisitionService {
     }
 
     public List<CatalogueResponse> getSupplierCatalogues(UUID supplierId) {
-        return catalogueRepository.findByUserIdOrderByCreatedAtDesc(supplierId).stream()
+        return catalogueRepository.findByUserIdOrderByCreatedAtDesc(Objects.requireNonNull(supplierId)).stream()
                 .map(c -> new CatalogueResponse(
                         c.getId(),
                         c.getProductName(),
@@ -413,7 +422,7 @@ public class RequisitionService {
                 ))
                 .collect(Collectors.toList());
 
-        int reqNum = r.getReqNumber() != null ? r.getReqNumber() : 1;
+        int reqNum = (r.getReqNumber() != null) ? r.getReqNumber().intValue() : 1;
         String status = r.getStatus();
         String prefix = ("PO".equalsIgnoreCase(status) || "Accepted".equalsIgnoreCase(status) || "Declined".equalsIgnoreCase(status)) ? "PO" : "PR";
         String requisitionId = String.format("%s%02d", prefix, reqNum);

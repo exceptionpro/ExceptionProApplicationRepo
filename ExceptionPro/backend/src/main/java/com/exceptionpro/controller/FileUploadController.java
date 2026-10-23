@@ -46,10 +46,10 @@ public class FileUploadController {
             boolean isDocument = extension.equals(".pdf") || extension.equals(".doc") || 
                                  extension.equals(".docx") || extension.equals(".xls") || 
                                  extension.equals(".xlsx") || extension.equals(".ppt") || 
-                                 extension.equals(".pptx");
+                                 extension.equals(".pptx") || extension.equals(".txt");
 
             if (!isImage && !isVideo && !isDocument) {
-                return ResponseEntity.badRequest().body(Map.of("message", "Unsupported file format. Only JPG, JPEG, PNG, WEBP images, MP4, MOV, AVI, WEBM videos, and PDF, DOC, DOCX, XLS, XLSX, PPT, PPTX documents are supported."));
+                return ResponseEntity.badRequest().body(Map.of("message", "Unsupported file format. Only JPG, JPEG, PNG, WEBP images, MP4, MOV, AVI, WEBM videos, and PDF, DOC, DOCX, XLS, XLSX, PPT, PPTX, TXT documents are supported."));
             }
 
             if (isImage) {

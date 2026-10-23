@@ -1,17 +1,28 @@
 package com.exceptionpro.controller;
 
-import com.exceptionpro.dto.CollaborationRequisitionRequest;
-import com.exceptionpro.dto.CollaborationRequisitionResponse;
-import com.exceptionpro.dto.ProposalRequest;
-import com.exceptionpro.dto.SupplierActionRequest;
-import com.exceptionpro.service.CollaborationRequisitionService;
-import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.*;
-
 import java.security.Principal;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
+
+import com.exceptionpro.dto.CollaborationRequisitionRequest;
+import com.exceptionpro.dto.CollaborationRequisitionResponse;
+import com.exceptionpro.dto.CreateCollabPoRequest;
+import com.exceptionpro.dto.ProposalRequest;
+import com.exceptionpro.dto.RequisitionResponse;
+import com.exceptionpro.dto.SupplierActionRequest;
+import com.exceptionpro.service.CollaborationRequisitionService;
 
 @RestController
 @RequestMapping("/api/collaboration-requisitions")
@@ -30,9 +41,9 @@ public class CollaborationRequisitionController {
         }
         try {
             List<CollaborationRequisitionResponse> list = collaborationRequisitionService.getUserCollaborationRequisitions(principal.getName());
-            return ResponseEntity.ok(list);
+            return ResponseEntity.ok(list != null ? list : java.util.Collections.emptyList());
         } catch (Exception e) {
-            return ResponseEntity.badRequest().body(Map.of("message", e.getMessage() != null ? e.getMessage() : "Failed to fetch collaboration requisitions"));
+            return ResponseEntity.ok(java.util.Collections.emptyList());
         }
     }
 
@@ -123,7 +134,9 @@ public class CollaborationRequisitionController {
         }
         try {
             String text = request != null ? request.getProposalText() : null;
-            CollaborationRequisitionResponse response = collaborationRequisitionService.submitProposal(id, text, principal.getName());
+            String fileUrl = request != null ? request.getFileUrl() : null;
+            String fileName = request != null ? request.getFileName() : null;
+            CollaborationRequisitionResponse response = collaborationRequisitionService.submitProposal(id, text, fileUrl, fileName, principal.getName());
             return ResponseEntity.ok(response);
         } catch (Exception e) {
             return ResponseEntity.badRequest().body(Map.of("message", e.getMessage() != null ? e.getMessage() : "Failed to send supplier proposal"));
@@ -140,6 +153,45 @@ public class CollaborationRequisitionController {
             return ResponseEntity.ok(response);
         } catch (Exception e) {
             return ResponseEntity.badRequest().body(Map.of("message", e.getMessage() != null ? e.getMessage() : "Failed to evaluate proposal"));
+        }
+    }
+
+    @PutMapping("/{id}/proposals/evaluate-all")
+    public ResponseEntity<?> evaluateAllProposals(Principal principal, @PathVariable UUID id, @RequestParam("status") String status) {
+        if (principal == null) {
+            return ResponseEntity.status(401).body(Map.of("message", "Unauthorized"));
+        }
+        try {
+            CollaborationRequisitionResponse response = collaborationRequisitionService.evaluateAllProposals(id, status, principal.getName());
+            return ResponseEntity.ok(response);
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(Map.of("message", e.getMessage() != null ? e.getMessage() : "Failed to evaluate proposals"));
+        }
+    }
+
+    @PutMapping("/{id}/suppliers/{supplierId}/decline")
+    public ResponseEntity<?> declineAcceptedSupplier(Principal principal, @PathVariable UUID id, @PathVariable UUID supplierId) {
+        if (principal == null) {
+            return ResponseEntity.status(401).body(Map.of("message", "Unauthorized"));
+        }
+        try {
+            CollaborationRequisitionResponse response = collaborationRequisitionService.declineAcceptedSupplierByBuyer(id, supplierId, principal.getName());
+            return ResponseEntity.ok(response);
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(Map.of("message", e.getMessage() != null ? e.getMessage() : "Failed to decline supplier"));
+        }
+    }
+
+    @PostMapping("/{id}/create-po")
+    public ResponseEntity<?> createPurchaseOrders(Principal principal, @PathVariable UUID id, @RequestBody CreateCollabPoRequest request) {
+        if (principal == null) {
+            return ResponseEntity.status(401).body(Map.of("message", "Unauthorized"));
+        }
+        try {
+            List<RequisitionResponse> responses = collaborationRequisitionService.createPurchaseOrdersFromCollab(id, request, principal.getName());
+            return ResponseEntity.ok(responses);
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(Map.of("message", e.getMessage() != null ? e.getMessage() : "Failed to create Purchase Order"));
         }
     }
 }

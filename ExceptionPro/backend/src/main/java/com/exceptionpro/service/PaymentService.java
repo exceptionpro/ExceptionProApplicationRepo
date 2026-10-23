@@ -67,13 +67,11 @@ public class PaymentService {
     }
 
     public List<PaymentResponse> getSupplierPayments(User supplier) {
-        List<Payment> savedPayments = paymentRepository.findBySupplierIdOrderByCreatedAtDesc(supplier.getId());
-
         // 1. Sync real requisitions where supplier matches
         syncRealSupplierRequisitions(supplier);
 
         // Reload payments
-        savedPayments = paymentRepository.findBySupplierIdOrderByCreatedAtDesc(supplier.getId());
+        List<Payment> savedPayments = paymentRepository.findBySupplierIdOrderByCreatedAtDesc(supplier.getId());
 
         // 2. If no payments exist, initialize with the exact specified sample records
         if (savedPayments.isEmpty()) {
@@ -92,13 +90,11 @@ public class PaymentService {
         User buyer = userRepository.findByEmail(buyerEmail)
                 .orElseThrow(() -> new IllegalArgumentException("Buyer not found"));
 
-        List<Payment> savedPayments = paymentRepository.findByBuyerIdOrderByCreatedAtDesc(buyer.getId());
-
         // 1. Synchronize real requisitions and invoices into payment records if they exist
         syncRealBuyerRequisitions(buyer);
 
         // Reload payments after synchronization
-        savedPayments = paymentRepository.findByBuyerIdOrderByCreatedAtDesc(buyer.getId());
+        List<Payment> savedPayments = paymentRepository.findByBuyerIdOrderByCreatedAtDesc(buyer.getId());
 
         // 2. If still no payments exist, initialize with realistic sample records
         if (savedPayments.isEmpty()) {
@@ -119,7 +115,7 @@ public class PaymentService {
         List<Invoice> allInvoices = invoiceRepository.findByBuyerIdOrderByCreatedAtDesc(buyer.getId());
 
         for (Requisition req : buyerReqs) {
-            int num = req.getReqNumber() != null ? req.getReqNumber() : 1;
+            int num = (req.getReqNumber() != null) ? req.getReqNumber().intValue() : 1;
             String poNumber = String.format("PO%02d", num);
 
             // Check if payment already exists for this requisition
@@ -162,7 +158,7 @@ public class PaymentService {
             BigDecimal poAmount = BigDecimal.ZERO;
             if (req.getItems() != null) {
                 for (RequisitionItem item : req.getItems()) {
-                    int q = item.getQuantity() != null ? item.getQuantity() : 0;
+                    int q = (item.getQuantity() != null) ? item.getQuantity().intValue() : 0;
                     BigDecimal price = item.getPrice() != null ? item.getPrice() : BigDecimal.ZERO;
                     poQty += q;
                     poAmount = poAmount.add(price.multiply(BigDecimal.valueOf(q)));
@@ -178,7 +174,7 @@ public class PaymentService {
                 payment.setPurchaseReceipt(firstRc);
                 payment.setReceiptNumber(firstRc.getReceiptNo() != null ? firstRc.getReceiptNo() : "REC-001");
                 payment.setReceiptDate(firstRc.getReceiptDate() != null ? firstRc.getReceiptDate() : LocalDate.now());
-                int recQty = reqReceipts.stream().mapToInt(r -> r.getQuantity() != null ? r.getQuantity() : 0).sum();
+                int recQty = reqReceipts.stream().mapToInt(r -> (r.getQuantity() != null) ? r.getQuantity().intValue() : 0).sum();
                 payment.setReceivedQuantity(recQty);
                 payment.setReceivedAmount(payment.getPoUnitPrice().multiply(BigDecimal.valueOf(recQty)).setScale(2, RoundingMode.HALF_UP));
             } else {
@@ -251,7 +247,7 @@ public class PaymentService {
                 .collect(Collectors.toList());
 
         for (Requisition req : suppReqs) {
-            int num = req.getReqNumber() != null ? req.getReqNumber() : 1;
+            int num = (req.getReqNumber() != null) ? req.getReqNumber().intValue() : 1;
             String poNumber = String.format("PO%02d", num);
 
             Optional<Payment> existingOpt = paymentRepository.findAll().stream()
@@ -279,7 +275,7 @@ public class PaymentService {
             BigDecimal poAmount = BigDecimal.ZERO;
             if (req.getItems() != null) {
                 for (RequisitionItem item : req.getItems()) {
-                    int q = item.getQuantity() != null ? item.getQuantity() : 0;
+                    int q = (item.getQuantity() != null) ? item.getQuantity().intValue() : 0;
                     BigDecimal price = item.getPrice() != null ? item.getPrice() : BigDecimal.ZERO;
                     poQty += q;
                     poAmount = poAmount.add(price.multiply(BigDecimal.valueOf(q)));
@@ -297,7 +293,7 @@ public class PaymentService {
                 payment.setPurchaseReceipt(firstRc);
                 payment.setReceiptNumber(firstRc.getReceiptNo() != null ? firstRc.getReceiptNo() : "REC-001");
                 payment.setReceiptDate(firstRc.getReceiptDate() != null ? firstRc.getReceiptDate() : LocalDate.now());
-                int recQty = reqReceipts.stream().mapToInt(r -> r.getQuantity() != null ? r.getQuantity() : 0).sum();
+                int recQty = reqReceipts.stream().mapToInt(r -> (r.getQuantity() != null) ? r.getQuantity().intValue() : 0).sum();
                 payment.setReceivedQuantity(recQty);
                 payment.setReceivedAmount(payment.getPoUnitPrice().multiply(BigDecimal.valueOf(recQty)).setScale(2, RoundingMode.HALF_UP));
             } else {
@@ -479,13 +475,13 @@ public class PaymentService {
     }
 
     public PaymentResponse getPaymentById(UUID id, String userEmail) {
-        Payment payment = paymentRepository.findById(id)
+        Payment payment = paymentRepository.findById(Objects.requireNonNull(id))
                 .orElseThrow(() -> new IllegalArgumentException("Payment not found"));
         return mapToResponse(payment);
     }
 
     public PaymentResponse updatePaymentStatus(UUID id, PaymentStatusUpdateRequest request, String buyerEmail) {
-        Payment payment = paymentRepository.findById(id)
+        Payment payment = paymentRepository.findById(Objects.requireNonNull(id))
                 .orElseThrow(() -> new IllegalArgumentException("Payment not found"));
 
         if (request.getPaymentStatus() != null && !request.getPaymentStatus().isBlank()) {
@@ -503,7 +499,7 @@ public class PaymentService {
         User buyer = userRepository.findByEmail(buyerEmail)
                 .orElseThrow(() -> new IllegalArgumentException("Buyer not found"));
 
-        Payment payment = paymentRepository.findById(id)
+        Payment payment = paymentRepository.findById(Objects.requireNonNull(id))
                 .orElseThrow(() -> new IllegalArgumentException("Payment not found"));
 
         payment.setPaymentStatus("Payment Due");
@@ -532,7 +528,7 @@ public class PaymentService {
         User buyer = userRepository.findByEmail(buyerEmail)
                 .orElseThrow(() -> new IllegalArgumentException("Buyer not found"));
 
-        Payment payment = paymentRepository.findById(id)
+        Payment payment = paymentRepository.findById(Objects.requireNonNull(id))
                 .orElseThrow(() -> new IllegalArgumentException("Payment not found"));
 
         payment.setPaymentStatus("Paid");
@@ -563,7 +559,7 @@ public class PaymentService {
 
         Payment payment;
         if (request.getId() != null) {
-            payment = paymentRepository.findById(request.getId()).orElse(new Payment());
+            payment = paymentRepository.findById(Objects.requireNonNull(request.getId())).orElse(new Payment());
         } else if (request.getPaymentId() != null) {
             payment = paymentRepository.findByPaymentId(request.getPaymentId()).orElse(new Payment());
         } else {
@@ -586,45 +582,45 @@ public class PaymentService {
         payment.setPaymentDate(request.getPaymentDate() != null ? request.getPaymentDate() : LocalDate.now());
 
         if (request.getBuyerId() != null) {
-            userRepository.findById(request.getBuyerId()).ifPresent(payment::setBuyer);
+            userRepository.findById(Objects.requireNonNull(request.getBuyerId())).ifPresent(payment::setBuyer);
         }
         if (request.getBuyerName() != null && !request.getBuyerName().isBlank()) {
             payment.setBuyerName(request.getBuyerName());
         }
 
         if (request.getSupplierId() != null) {
-            userRepository.findById(request.getSupplierId()).ifPresent(payment::setSupplier);
+            userRepository.findById(Objects.requireNonNull(request.getSupplierId())).ifPresent(payment::setSupplier);
         }
         if (request.getSupplierName() != null) {
             payment.setSupplierName(request.getSupplierName());
         }
 
         if (request.getRequisitionId() != null) {
-            requisitionRepository.findById(request.getRequisitionId()).ifPresent(payment::setRequisition);
+            requisitionRepository.findById(Objects.requireNonNull(request.getRequisitionId())).ifPresent(payment::setRequisition);
         }
         if (request.getPurchaseReceiptId() != null) {
-            purchaseReceiptRepository.findById(request.getPurchaseReceiptId()).ifPresent(payment::setPurchaseReceipt);
+            purchaseReceiptRepository.findById(Objects.requireNonNull(request.getPurchaseReceiptId())).ifPresent(payment::setPurchaseReceipt);
         }
         if (request.getInvoiceId() != null) {
-            invoiceRepository.findById(request.getInvoiceId()).ifPresent(payment::setInvoice);
+            invoiceRepository.findById(Objects.requireNonNull(request.getInvoiceId())).ifPresent(payment::setInvoice);
         }
         if (request.getReconciliationId() != null) {
-            reconciliationRepository.findById(request.getReconciliationId()).ifPresent(payment::setReconciliation);
+            reconciliationRepository.findById(Objects.requireNonNull(request.getReconciliationId())).ifPresent(payment::setReconciliation);
         }
 
         payment.setPoNumber(request.getPoNumber());
-        payment.setPoQuantity(request.getPoQuantity() != null ? request.getPoQuantity() : 0);
+        payment.setPoQuantity(request.getPoQuantity() != null ? request.getPoQuantity() : Integer.valueOf(0));
         payment.setPoUnitPrice(request.getPoUnitPrice() != null ? request.getPoUnitPrice() : BigDecimal.ZERO);
         payment.setPoAmount(request.getPoAmount() != null ? request.getPoAmount() : BigDecimal.ZERO);
 
         payment.setReceiptNumber(request.getReceiptNumber());
         payment.setReceiptDate(request.getReceiptDate());
-        payment.setReceivedQuantity(request.getReceivedQuantity() != null ? request.getReceivedQuantity() : 0);
+        payment.setReceivedQuantity(request.getReceivedQuantity() != null ? request.getReceivedQuantity() : Integer.valueOf(0));
         payment.setReceivedAmount(request.getReceivedAmount() != null ? request.getReceivedAmount() : BigDecimal.ZERO);
 
         payment.setInvoiceNumber(request.getInvoiceNumber());
         payment.setInvoiceDate(request.getInvoiceDate());
-        payment.setInvoiceQuantity(request.getInvoiceQuantity() != null ? request.getInvoiceQuantity() : 0);
+        payment.setInvoiceQuantity(request.getInvoiceQuantity() != null ? request.getInvoiceQuantity() : Integer.valueOf(0));
         payment.setInvoiceUnitPrice(request.getInvoiceUnitPrice() != null ? request.getInvoiceUnitPrice() : BigDecimal.ZERO);
         payment.setInvoiceAmount(request.getInvoiceAmount() != null ? request.getInvoiceAmount() : BigDecimal.ZERO);
 
@@ -774,7 +770,7 @@ public class PaymentService {
             r.setRequisitionId(p.getRequisition().getId());
         }
         r.setPoNumber(p.getPoNumber());
-        r.setPoQuantity(p.getPoQuantity() != null ? p.getPoQuantity() : 0);
+        r.setPoQuantity(p.getPoQuantity() != null ? p.getPoQuantity() : Integer.valueOf(0));
         r.setPoUnitPrice(p.getPoUnitPrice() != null ? p.getPoUnitPrice() : BigDecimal.ZERO);
         r.setPoAmount(p.getPoAmount() != null ? p.getPoAmount() : BigDecimal.ZERO);
 
@@ -783,7 +779,7 @@ public class PaymentService {
         }
         r.setReceiptNumber(p.getReceiptNumber());
         r.setReceiptDate(p.getReceiptDate());
-        r.setReceivedQuantity(p.getReceivedQuantity() != null ? p.getReceivedQuantity() : 0);
+        r.setReceivedQuantity(p.getReceivedQuantity() != null ? p.getReceivedQuantity() : Integer.valueOf(0));
         r.setReceivedAmount(p.getReceivedAmount() != null ? p.getReceivedAmount() : BigDecimal.ZERO);
 
         if (p.getInvoice() != null) {
@@ -791,7 +787,7 @@ public class PaymentService {
         }
         r.setInvoiceNumber(p.getInvoiceNumber());
         r.setInvoiceDate(p.getInvoiceDate());
-        r.setInvoiceQuantity(p.getInvoiceQuantity() != null ? p.getInvoiceQuantity() : 0);
+        r.setInvoiceQuantity(p.getInvoiceQuantity() != null ? p.getInvoiceQuantity() : Integer.valueOf(0));
         r.setInvoiceUnitPrice(p.getInvoiceUnitPrice() != null ? p.getInvoiceUnitPrice() : BigDecimal.ZERO);
         r.setInvoiceAmount(p.getInvoiceAmount() != null ? p.getInvoiceAmount() : BigDecimal.ZERO);
 
@@ -801,9 +797,9 @@ public class PaymentService {
         r.setReconciliationStatus(p.getReconciliationStatus() != null ? p.getReconciliationStatus() : "Matched");
         r.setExceptionReason(p.getExceptionReason());
 
-        int poQ = r.getPoQuantity();
-        int recQ = r.getReceivedQuantity();
-        int invQ = r.getInvoiceQuantity();
+        int poQ = r.getPoQuantity() != null ? r.getPoQuantity().intValue() : 0;
+        int recQ = r.getReceivedQuantity() != null ? r.getReceivedQuantity().intValue() : 0;
+        int invQ = r.getInvoiceQuantity() != null ? r.getInvoiceQuantity().intValue() : 0;
         r.setPoVsReceiptQtyVariance(recQ - poQ);
         r.setReceiptVsInvoiceQtyVariance(invQ - recQ);
         r.setPoVsInvoiceQtyVariance(invQ - poQ);

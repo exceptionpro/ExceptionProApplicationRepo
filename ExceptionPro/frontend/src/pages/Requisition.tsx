@@ -471,7 +471,11 @@ const RequisitionPage: React.FC = () => {
     }
   };
 
-  const handleDeleteRequisition = async (id: string) => {
+  const handleDeleteRequisition = async (id: string, status?: string) => {
+    if (status === 'PO') {
+      setError('Cannot delete a requisition that has already been converted to Purchase Order (PO).');
+      return;
+    }
     if (!window.confirm('Are you sure you want to delete this requisition?')) return;
     try {
       await api.delete(`/api/requisitions/${id}`);
@@ -483,6 +487,10 @@ const RequisitionPage: React.FC = () => {
   };
 
   const handleStartEdit = (req: RequisitionData) => {
+    if (req.status === 'PO') {
+      setError('Cannot edit a requisition that has already been converted to Purchase Order (PO).');
+      return;
+    }
     setEditingRequisition(JSON.parse(JSON.stringify(req)));
   };
 
@@ -885,9 +893,10 @@ const RequisitionPage: React.FC = () => {
                       </button>
                     )}
 
-                    {/* b) Edit - Light Blue Color */}
+                    {/* b) Edit - Light Blue Color (Disabled once converted to PO with dull/dim appearance) */}
                     <button
                       className="btn"
+                      disabled={req.status === 'PO'}
                       style={{
                         width: '140px',
                         minWidth: '140px',
@@ -900,20 +909,24 @@ const RequisitionPage: React.FC = () => {
                         color: '#ffffff',
                         border: 'none',
                         borderRadius: '6px',
-                        cursor: 'pointer',
+                        cursor: req.status === 'PO' ? 'not-allowed' : 'pointer',
                         fontWeight: 600,
                         whiteSpace: 'nowrap',
                         flexShrink: 0,
                         boxSizing: 'border-box',
+                        opacity: req.status === 'PO' ? 0.45 : 1,
+                        filter: req.status === 'PO' ? 'saturate(70%) brightness(0.85)' : 'none',
                       }}
-                      onClick={() => handleStartEdit(req)}
+                      onClick={() => req.status !== 'PO' && handleStartEdit(req)}
+                      title={req.status === 'PO' ? 'Cannot edit: Requisition has already been converted to Purchase Order (PO)' : 'Edit Requisition'}
                     >
                       Edit
                     </button>
 
-                    {/* c) Delete */}
+                    {/* c) Delete (Disabled once converted to PO with dull/dim appearance) */}
                     <button
                       className="btn"
+                      disabled={req.status === 'PO'}
                       style={{
                         width: '140px',
                         minWidth: '140px',
@@ -923,16 +936,19 @@ const RequisitionPage: React.FC = () => {
                         alignItems: 'center',
                         fontSize: '0.85rem',
                         background: '#ef4444',
-                        color: '#fff',
+                        color: '#ffffff',
                         border: 'none',
                         borderRadius: '6px',
-                        cursor: 'pointer',
+                        cursor: req.status === 'PO' ? 'not-allowed' : 'pointer',
                         fontWeight: 600,
                         whiteSpace: 'nowrap',
                         flexShrink: 0,
                         boxSizing: 'border-box',
+                        opacity: req.status === 'PO' ? 0.45 : 1,
+                        filter: req.status === 'PO' ? 'saturate(70%) brightness(0.85)' : 'none',
                       }}
-                      onClick={() => handleDeleteRequisition(req.id)}
+                      onClick={() => req.status !== 'PO' && handleDeleteRequisition(req.id, req.status)}
+                      title={req.status === 'PO' ? 'Cannot delete: Requisition has already been converted to Purchase Order (PO)' : 'Delete Requisition'}
                     >
                       Delete
                     </button>

@@ -65,18 +65,18 @@ public class PurchaseReceiptService {
             throw new IllegalArgumentException("Received From (Supplier) is required");
         }
 
-        User supplier = userRepository.findById(request.getReceivedFromSupplierId())
+        User supplier = userRepository.findById(Objects.requireNonNull(request.getReceivedFromSupplierId()))
                 .orElseThrow(() -> new IllegalArgumentException("Supplier not found"));
 
         Requisition po = null;
         if (request.getPurchaseOrderId() != null) {
-            po = requisitionRepository.findById(request.getPurchaseOrderId())
+            po = requisitionRepository.findById(Objects.requireNonNull(request.getPurchaseOrderId()))
                     .orElseThrow(() -> new IllegalArgumentException("Purchase Order not found"));
         }
 
         Invoice invoice = null;
         if (request.getInvoiceId() != null) {
-            invoice = invoiceRepository.findById(request.getInvoiceId())
+            invoice = invoiceRepository.findById(Objects.requireNonNull(request.getInvoiceId()))
                     .orElseThrow(() -> new IllegalArgumentException("Invoice not found"));
         }
 
@@ -100,7 +100,7 @@ public class PurchaseReceiptService {
         User buyer = userRepository.findByEmail(buyerEmail)
                 .orElseThrow(() -> new IllegalArgumentException("Buyer not found"));
 
-        PurchaseReceipt receipt = purchaseReceiptRepository.findById(id)
+        PurchaseReceipt receipt = purchaseReceiptRepository.findById(Objects.requireNonNull(id))
                 .orElseThrow(() -> new IllegalArgumentException("Purchase Receipt not found"));
 
         if (!receipt.getBuyer().getId().equals(buyer.getId())) {
@@ -124,13 +124,13 @@ public class PurchaseReceiptService {
         }
 
         if (request.getReceivedFromSupplierId() != null) {
-            User supplier = userRepository.findById(request.getReceivedFromSupplierId())
+            User supplier = userRepository.findById(Objects.requireNonNull(request.getReceivedFromSupplierId()))
                     .orElseThrow(() -> new IllegalArgumentException("Supplier not found"));
             receipt.setReceivedFromSupplier(supplier);
         }
 
         if (request.getPurchaseOrderId() != null) {
-            Requisition po = requisitionRepository.findById(request.getPurchaseOrderId())
+            Requisition po = requisitionRepository.findById(Objects.requireNonNull(request.getPurchaseOrderId()))
                     .orElseThrow(() -> new IllegalArgumentException("Purchase Order not found"));
             receipt.setPurchaseOrder(po);
         } else {
@@ -138,7 +138,7 @@ public class PurchaseReceiptService {
         }
 
         if (request.getInvoiceId() != null) {
-            Invoice invoice = invoiceRepository.findById(request.getInvoiceId())
+            Invoice invoice = invoiceRepository.findById(Objects.requireNonNull(request.getInvoiceId()))
                     .orElseThrow(() -> new IllegalArgumentException("Invoice not found"));
             receipt.setInvoice(invoice);
         } else {
@@ -154,14 +154,14 @@ public class PurchaseReceiptService {
         User buyer = userRepository.findByEmail(buyerEmail)
                 .orElseThrow(() -> new IllegalArgumentException("Buyer not found"));
 
-        PurchaseReceipt receipt = purchaseReceiptRepository.findById(id)
+        PurchaseReceipt receipt = purchaseReceiptRepository.findById(Objects.requireNonNull(id))
                 .orElseThrow(() -> new IllegalArgumentException("Purchase Receipt not found"));
 
         if (!receipt.getBuyer().getId().equals(buyer.getId())) {
             throw new IllegalArgumentException("You are not authorized to delete this Purchase Receipt");
         }
 
-        purchaseReceiptRepository.delete(receipt);
+        purchaseReceiptRepository.delete(Objects.requireNonNull(receipt));
     }
 
     public List<PurchaseReceiptResponse> getBuyerReceipts(String buyerEmail) {
@@ -182,7 +182,7 @@ public class PurchaseReceiptService {
         List<Map<String, Object>> poList = new ArrayList<>();
 
         for (Requisition r : reqs) {
-            int num = r.getReqNumber() != null ? r.getReqNumber() : 1;
+            int num = (r.getReqNumber() != null) ? r.getReqNumber().intValue() : 1;
             String code = String.format("PO%02d", num);
 
             Map<String, Object> map = new HashMap<>();
@@ -269,7 +269,7 @@ public class PurchaseReceiptService {
         map.put("status", inv.getStatus());
         if (inv.getRequisition() != null) {
             map.put("purchaseOrderId", inv.getRequisition().getId());
-            int num = inv.getRequisition().getReqNumber() != null ? inv.getRequisition().getReqNumber() : 1;
+            int num = (inv.getRequisition().getReqNumber() != null) ? inv.getRequisition().getReqNumber().intValue() : 1;
             map.put("purchaseOrderCode", String.format("PO%02d", num));
             map.put("purchaseOrderTitle", inv.getRequisition().getTitle());
         }
@@ -285,7 +285,7 @@ public class PurchaseReceiptService {
         String poCode = null;
         String poTitle = null;
         if (r.getPurchaseOrder() != null) {
-            int num = r.getPurchaseOrder().getReqNumber() != null ? r.getPurchaseOrder().getReqNumber() : 1;
+            int num = (r.getPurchaseOrder().getReqNumber() != null) ? r.getPurchaseOrder().getReqNumber().intValue() : 1;
             poCode = String.format("PO%02d", num);
             poTitle = r.getPurchaseOrder().getTitle();
         }

@@ -9,9 +9,9 @@ import com.exceptionpro.repository.UserRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Objects;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -78,7 +78,7 @@ public class CatalogueService {
         User user = userRepository.findByEmail(email)
                 .orElseThrow(() -> new IllegalArgumentException("User not found"));
 
-        Catalogue catalogue = catalogueRepository.findById(id)
+        Catalogue catalogue = catalogueRepository.findById(Objects.requireNonNull(id))
                 .orElseThrow(() -> new IllegalArgumentException("Catalogue not found"));
 
         if (!catalogue.getUser().getId().equals(user.getId())) {
@@ -115,14 +115,14 @@ public class CatalogueService {
         User user = userRepository.findByEmail(email)
                 .orElseThrow(() -> new IllegalArgumentException("User not found"));
 
-        Catalogue catalogue = catalogueRepository.findById(id)
+        Catalogue catalogue = catalogueRepository.findById(Objects.requireNonNull(id))
                 .orElseThrow(() -> new IllegalArgumentException("Catalogue not found"));
 
         if (!catalogue.getUser().getId().equals(user.getId())) {
             throw new IllegalArgumentException("You can only delete your own catalogues");
         }
 
-        catalogueRepository.delete(catalogue);
+        catalogueRepository.delete(Objects.requireNonNull(catalogue));
     }
 
     private CatalogueResponse mapToResponse(Catalogue c) {

@@ -28,6 +28,12 @@ public class CollaborationProposal {
     @Column(name = "created_at", nullable = false)
     private LocalDateTime createdAt = LocalDateTime.now();
 
+    @Column(name = "file_url")
+    private String fileUrl;
+
+    @Column(name = "file_name")
+    private String fileName;
+
     public String getEvaluationStatus() {
         return evaluationStatus;
     }
@@ -74,5 +80,21 @@ public class CollaborationProposal {
 
     public void setCreatedAt(LocalDateTime createdAt) {
         this.createdAt = createdAt;
+    }
+
+    public String getFileUrl() {
+        return fileUrl;
+    }
+
+    public void setFileUrl(String fileUrl) {
+        this.fileUrl = fileUrl;
+    }
+
+    public String getFileName() {
+        return fileName;
+    }
+
+    public void setFileName(String fileName) {
+        this.fileName = fileName;
     }
 }

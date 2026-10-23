@@ -13,6 +13,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -50,20 +51,12 @@ public class PartnerService {
                 BusinessPartnerRequest request = requestOpt.get();
                 requestId = request.getId();
                 String reqStatus = request.getStatus();
-
-                if ("PENDING".equals(reqStatus)) {
-                    if (request.getSender().getId().equals(currentUser.getId())) {
-                        status = "PENDING_SENT";
-                    } else {
-                        status = "PENDING_RECEIVED";
-                    }
-                } else if ("ACCEPTED".equals(reqStatus)) {
-                    status = "ACCEPTED";
-                } else if ("DECLINED".equals(reqStatus)) {
-                    if (request.getSender().getId().equals(currentUser.getId())) {
-                        status = "DECLINED_SENT";
-                    } else {
-                        status = "DECLINED_RECEIVED";
+                if (reqStatus != null) {
+                    switch (reqStatus) {
+                        case "PENDING" -> status = request.getSender().getId().equals(currentUser.getId()) ? "PENDING_SENT" : "PENDING_RECEIVED";
+                        case "ACCEPTED" -> status = "ACCEPTED";
+                        case "DECLINED" -> status = request.getSender().getId().equals(currentUser.getId()) ? "DECLINED_SENT" : "DECLINED_RECEIVED";
+                        default -> {}
                     }
                 }
             }
@@ -79,7 +72,7 @@ public class PartnerService {
         User sender = userRepository.findByEmail(senderEmail)
                 .orElseThrow(() -> new IllegalArgumentException("Sender not found"));
 
-        User receiver = userRepository.findById(receiverId)
+        User receiver = userRepository.findById(Objects.requireNonNull(receiverId))
                 .orElseThrow(() -> new IllegalArgumentException("Receiver not found"));
 
         if (sender.getId().equals(receiver.getId())) {
@@ -118,7 +111,7 @@ public class PartnerService {
         User receiver = userRepository.findByEmail(receiverEmail)
                 .orElseThrow(() -> new IllegalArgumentException("User not found"));
 
-        BusinessPartnerRequest request = requestRepository.findById(requestId)
+        BusinessPartnerRequest request = requestRepository.findById(Objects.requireNonNull(requestId))
                 .orElseThrow(() -> new IllegalArgumentException("Partnership request not found"));
 
         if (!request.getReceiver().getId().equals(receiver.getId())) {
@@ -138,7 +131,7 @@ public class PartnerService {
         User receiver = userRepository.findByEmail(receiverEmail)
                 .orElseThrow(() -> new IllegalArgumentException("User not found"));
 
-        BusinessPartnerRequest request = requestRepository.findById(requestId)
+        BusinessPartnerRequest request = requestRepository.findById(Objects.requireNonNull(requestId))
                 .orElseThrow(() -> new IllegalArgumentException("Partnership request not found"));
 
         if (!request.getReceiver().getId().equals(receiver.getId())) {
@@ -158,14 +151,14 @@ public class PartnerService {
         User user = userRepository.findByEmail(email)
                 .orElseThrow(() -> new IllegalArgumentException("User not found"));
 
-        BusinessPartnerRequest request = requestRepository.findById(requestId)
+        BusinessPartnerRequest request = requestRepository.findById(Objects.requireNonNull(requestId))
                 .orElseThrow(() -> new IllegalArgumentException("Partnership request not found"));
 
         if (!request.getSender().getId().equals(user.getId()) && !request.getReceiver().getId().equals(user.getId())) {
             throw new IllegalArgumentException("You are not authorized to cancel or remove this request");
         }
 
-        requestRepository.delete(request);
+        requestRepository.delete(Objects.requireNonNull(request));
     }
 
     public List<PartnerSearchResponse> getIncomingPendingRequests(String email) {
@@ -224,19 +217,12 @@ public class PartnerService {
             requestId = request.getId();
             String reqStatus = request.getStatus();
 
-            if ("PENDING".equals(reqStatus)) {
-                if (request.getSender().getId().equals(currentUser.getId())) {
-                    status = "PENDING_SENT";
-                } else {
-                    status = "PENDING_RECEIVED";
-                }
-            } else if ("ACCEPTED".equals(reqStatus)) {
-                status = "ACCEPTED";
-            } else if ("DECLINED".equals(reqStatus)) {
-                if (request.getSender().getId().equals(currentUser.getId())) {
-                    status = "DECLINED_SENT";
-                } else {
-                    status = "DECLINED_RECEIVED";
+            if (reqStatus != null) {
+                switch (reqStatus) {
+                    case "PENDING" -> status = request.getSender().getId().equals(currentUser.getId()) ? "PENDING_SENT" : "PENDING_RECEIVED";
+                    case "ACCEPTED" -> status = "ACCEPTED";
+                    case "DECLINED" -> status = request.getSender().getId().equals(currentUser.getId()) ? "DECLINED_SENT" : "DECLINED_RECEIVED";
+                    default -> {}
                 }
             }
         }
@@ -324,19 +310,12 @@ public class PartnerService {
                 requestId = request.getId();
                 String reqStatus = request.getStatus();
 
-                if ("PENDING".equals(reqStatus)) {
-                    if (request.getSender().getId().equals(currentUser.getId())) {
-                        status = "PENDING_SENT";
-                    } else {
-                        status = "PENDING_RECEIVED";
-                    }
-                } else if ("ACCEPTED".equals(reqStatus)) {
-                    status = "ACCEPTED";
-                } else if ("DECLINED".equals(reqStatus)) {
-                    if (request.getSender().getId().equals(currentUser.getId())) {
-                        status = "DECLINED_SENT";
-                    } else {
-                        status = "DECLINED_RECEIVED";
+                if (reqStatus != null) {
+                    switch (reqStatus) {
+                        case "PENDING" -> status = request.getSender().getId().equals(currentUser.getId()) ? "PENDING_SENT" : "PENDING_RECEIVED";
+                        case "ACCEPTED" -> status = "ACCEPTED";
+                        case "DECLINED" -> status = request.getSender().getId().equals(currentUser.getId()) ? "DECLINED_SENT" : "DECLINED_RECEIVED";
+                        default -> {}
                     }
                 }
             }

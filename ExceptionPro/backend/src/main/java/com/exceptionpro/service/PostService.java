@@ -127,7 +127,7 @@ public class PostService {
     }
 
     public void likePost(UUID postId, String userEmail) {
-        Post post = postRepository.findById(postId)
+        Post post = postRepository.findById(Objects.requireNonNull(postId))
                 .orElseThrow(() -> new IllegalArgumentException("Post not found"));
         User user = userRepository.findByEmailFetchProfiles(userEmail)
                 .orElseThrow(() -> new IllegalArgumentException("User not found"));
@@ -167,7 +167,7 @@ public class PostService {
     }
 
     public void addComment(UUID postId, String commentText, UUID parentId, String userEmail) {
-        Post post = postRepository.findById(postId)
+        Post post = postRepository.findById(Objects.requireNonNull(postId))
                 .orElseThrow(() -> new IllegalArgumentException("Post not found"));
         User user = userRepository.findByEmailFetchProfiles(userEmail)
                 .orElseThrow(() -> new IllegalArgumentException("User not found"));
@@ -212,7 +212,7 @@ public class PostService {
     }
 
     public void deletePost(UUID postId, String userEmail) {
-        Post post = postRepository.findById(postId)
+        Post post = postRepository.findById(Objects.requireNonNull(postId))
                 .orElseThrow(() -> new IllegalArgumentException("Post not found"));
         User user = userRepository.findByEmail(userEmail)
                 .orElseThrow(() -> new IllegalArgumentException("User not found"));
@@ -227,7 +227,7 @@ public class PostService {
     }
 
     public void recordView(UUID postId) {
-        Post post = postRepository.findById(postId).orElse(null);
+        Post post = postRepository.findById(Objects.requireNonNull(postId)).orElse(null);
         if (post != null) {
             post.setNumViews(post.getNumViews() + 1);
             postRepository.save(post);
@@ -235,7 +235,7 @@ public class PostService {
     }
 
     public void recordShare(UUID postId) {
-        Post post = postRepository.findById(postId).orElse(null);
+        Post post = postRepository.findById(Objects.requireNonNull(postId)).orElse(null);
         if (post != null) {
             post.setNumShares(post.getNumShares() + 1);
             postRepository.save(post);
@@ -243,7 +243,7 @@ public class PostService {
     }
 
     public boolean savePost(UUID postId, String userEmail) {
-        Post post = postRepository.findById(postId)
+        Post post = postRepository.findById(Objects.requireNonNull(postId))
                 .orElseThrow(() -> new IllegalArgumentException("Post not found"));
         User user = userRepository.findByEmail(userEmail)
                 .orElseThrow(() -> new IllegalArgumentException("User not found"));
@@ -261,7 +261,7 @@ public class PostService {
     }
 
     public void reportPost(UUID postId, String reason, String comments, String userEmail) {
-        Post post = postRepository.findById(postId)
+        Post post = postRepository.findById(Objects.requireNonNull(postId))
                 .orElseThrow(() -> new IllegalArgumentException("Post not found"));
         User user = userRepository.findByEmail(userEmail)
                 .orElseThrow(() -> new IllegalArgumentException("User not found"));
@@ -355,7 +355,7 @@ public class PostService {
     }
 
     public void editComment(UUID commentId, String commentText, String userEmail) {
-        Comment comment = commentRepository.findById(commentId)
+        Comment comment = commentRepository.findById(Objects.requireNonNull(commentId))
                 .orElseThrow(() -> new IllegalArgumentException("Comment not found"));
 
         if (!comment.getUser().getEmail().equalsIgnoreCase(userEmail)) {
@@ -367,7 +367,7 @@ public class PostService {
     }
 
     public void deleteComment(UUID commentId, String userEmail) {
-        Comment comment = commentRepository.findById(commentId)
+        Comment comment = commentRepository.findById(Objects.requireNonNull(commentId))
                 .orElseThrow(() -> new IllegalArgumentException("Comment not found"));
 
         if (!comment.getUser().getEmail().equalsIgnoreCase(userEmail)) {
@@ -375,7 +375,7 @@ public class PostService {
         }
 
         Post post = comment.getPost();
-        commentRepository.delete(comment);
+        commentRepository.delete(Objects.requireNonNull(comment));
 
         if (post.getNumComments() > 0) {
             post.setNumComments(post.getNumComments() - 1);
@@ -395,7 +395,7 @@ public class PostService {
         cr.setLikedByCurrentUser(currentUser != null && c.getLikedByUsers().contains(currentUser));
 
         List<Comment> sortedReplies = new ArrayList<>(c.getReplies());
-        sortedReplies.sort(Comparator.comparing(Comment::getDateCreated));
+        sortedReplies.sort(Comparator.comparing(cItem -> cItem != null ? cItem.getDateCreated() : null, Comparator.nullsLast(Comparator.naturalOrder())));
         cr.setReplies(sortedReplies.stream()
                 .map(reply -> mapCommentToResponse(reply, currentUser))
                 .collect(Collectors.toList()));
@@ -404,7 +404,7 @@ public class PostService {
     }
 
     public void likeComment(UUID commentId, String userEmail) {
-        Comment comment = commentRepository.findById(commentId)
+        Comment comment = commentRepository.findById(Objects.requireNonNull(commentId))
                 .orElseThrow(() -> new IllegalArgumentException("Comment not found"));
         User user = userRepository.findByEmail(userEmail)
                 .orElseThrow(() -> new IllegalArgumentException("User not found"));
@@ -420,7 +420,7 @@ public class PostService {
     }
 
     public PostResponse editPost(UUID postId, PostRequest request, String userEmail) {
-        Post post = postRepository.findById(postId)
+        Post post = postRepository.findById(Objects.requireNonNull(postId))
                 .orElseThrow(() -> new IllegalArgumentException("Post not found"));
         User user = userRepository.findByEmailFetchProfiles(userEmail)
                 .orElseThrow(() -> new IllegalArgumentException("User not found"));

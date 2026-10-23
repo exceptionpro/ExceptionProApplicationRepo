@@ -88,6 +88,12 @@ const AppContent: React.FC = () => {
           </PrivateRoute>
         } />
 
+        <Route path="/collaboration-requisitions" element={
+          <PrivateRoute>
+            <CollaborationRequisition />
+          </PrivateRoute>
+        } />
+
         <Route path="/collaboration-request-notification" element={
           <PrivateRoute>
             <CollaborationRequestNotification />

@@ -154,7 +154,7 @@ const NotificationsPage: React.FC = () => {
       <LeftNavigation activePage="notifications" />
 
       <main style={{ flex: 1, width: '100%', maxWidth: '100%', display: 'flex', flexDirection: 'column', gap: '1.5rem', boxSizing: 'border-box' }}>
-        
+
         {/* Page Header */}
         <div className="glass-card glass-card-lg" style={{ padding: '2rem 2rem 1.25rem 2rem', width: '100%', maxWidth: 'none', boxSizing: 'border-box' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem', flexWrap: 'wrap', gap: '1rem' }}>

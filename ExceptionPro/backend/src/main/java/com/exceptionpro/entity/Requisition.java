@@ -43,6 +43,9 @@ public class Requisition {
     @Column(name = "req_number")
     private Integer reqNumber;
 
+    @Column(name = "collaboration_requisition_id")
+    private UUID collaborationRequisitionId;
+
     @Column(nullable = false)
     private String status = "PR";
 
@@ -154,5 +157,13 @@ public class Requisition {
 
     public void setReqNumber(Integer reqNumber) {
         this.reqNumber = reqNumber;
+    }
+
+    public UUID getCollaborationRequisitionId() {
+        return collaborationRequisitionId;
+    }
+
+    public void setCollaborationRequisitionId(UUID collaborationRequisitionId) {
+        this.collaborationRequisitionId = collaborationRequisitionId;
     }
 }

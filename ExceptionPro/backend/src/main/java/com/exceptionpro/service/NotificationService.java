@@ -2,6 +2,7 @@ package com.exceptionpro.service;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -14,7 +15,6 @@ import com.exceptionpro.entity.BusinessPartnerRequest;
 import com.exceptionpro.entity.Notification;
 import com.exceptionpro.entity.Post;
 import com.exceptionpro.entity.Requisition;
-import com.exceptionpro.entity.RequisitionItem;
 import com.exceptionpro.entity.User;
 import com.exceptionpro.repository.BusinessPartnerRequestRepository;
 import com.exceptionpro.repository.NotificationRepository;
@@ -109,7 +109,8 @@ public class NotificationService {
         } else if (isMyPost) {
             list = notificationRepository.findByRecipientIdAndCategoryInOrderByCreatedAtDesc(user.getId(), List.of("MY_POST", "MY_POSTS"));
         } else {
-            list = notificationRepository.findByRecipientIdAndCategoryOrderByCreatedAtDesc(user.getId(), category.toUpperCase());
+            String cat = category != null ? category.toUpperCase() : "";
+            list = notificationRepository.findByRecipientIdAndCategoryOrderByCreatedAtDesc(user.getId(), cat);
         }
 
         return list.stream()
@@ -126,12 +127,12 @@ public class NotificationService {
         String supplierName = getUserDisplayName(supplier);
         String buyerName = getUserDisplayName(buyer);
 
-        int reqNum = saved.getReqNumber() != null ? saved.getReqNumber() : 1;
+        int reqNum = saved.getReqNumber() != null ? saved.getReqNumber().intValue() : 1;
         String poCode = String.format("PO%02d", reqNum);
 
         String productNames = (saved.getItems() != null && !saved.getItems().isEmpty())
                 ? saved.getItems().stream()
-                        .map(RequisitionItem::getProductName)
+                        .map(i -> i != null ? i.getProductName() : null)
                         .filter(p -> p != null && !p.isBlank())
                         .distinct()
                         .collect(Collectors.joining(", "))
@@ -139,7 +140,7 @@ public class NotificationService {
 
         String itemDescriptions = (saved.getItems() != null && !saved.getItems().isEmpty())
                 ? saved.getItems().stream()
-                        .map(RequisitionItem::getFullDescription)
+                        .map(i -> i != null ? i.getFullDescription() : null)
                         .filter(d -> d != null && !d.isBlank())
                         .distinct()
                         .collect(Collectors.joining("; "))
@@ -196,13 +197,13 @@ public class NotificationService {
                 String supplierName = supplier != null ? getUserDisplayName(supplier) : "Supplier";
                 String buyerName = getUserDisplayName(buyer);
 
-                int reqNum = r.getReqNumber() != null ? r.getReqNumber() : 1;
+                int reqNum = r.getReqNumber() != null ? r.getReqNumber().intValue() : 1;
                 String poCode = String.format("PO%02d", reqNum);
                 String status = r.getStatus();
 
                 String productNames = (r.getItems() != null && !r.getItems().isEmpty())
                         ? r.getItems().stream()
-                                .map(RequisitionItem::getProductName)
+                                .map(i -> i != null ? i.getProductName() : null)
                                 .filter(p -> p != null && !p.isBlank())
                                 .distinct()
                                 .collect(Collectors.joining(", "))
@@ -210,7 +211,7 @@ public class NotificationService {
 
                 String itemDescriptions = (r.getItems() != null && !r.getItems().isEmpty())
                         ? r.getItems().stream()
-                                .map(RequisitionItem::getFullDescription)
+                                .map(i -> i != null ? i.getFullDescription() : null)
                                 .filter(d -> d != null && !d.isBlank())
                                 .distinct()
                                 .collect(Collectors.joining("; "))
@@ -293,7 +294,7 @@ public class NotificationService {
                                 .filter(i -> i.getSupplier() == null
                                         || (i.getSupplier() != null && i.getSupplier().getId().equals(user.getId()))
                                         || (r.getSupplier() != null && r.getSupplier().getId().equals(user.getId())))
-                                .map(RequisitionItem::getProductName)
+                                .map(i -> i != null ? i.getProductName() : null)
                                 .filter(p -> p != null && !p.isBlank())
                                 .distinct()
                                 .collect(Collectors.joining(", "))
@@ -303,7 +304,7 @@ public class NotificationService {
                     productNames = r.getTitle() != null ? r.getTitle() : "Product";
                 }
 
-                int reqNum = r.getReqNumber() != null ? r.getReqNumber() : 1;
+                int reqNum = r.getReqNumber() != null ? r.getReqNumber().intValue() : 1;
                 String poCode = String.format("PO%02d", reqNum);
                 String expectedTitle = "New Purchase Order Submitted (" + poCode + ")";
                 String expectedMsg = "Buyer " + buyerName + " submitted a Purchase Order " + poCode + " for Product: " + productNames + ".";
@@ -411,7 +412,7 @@ public class NotificationService {
         User user = userRepository.findByEmail(userEmail)
                 .orElseThrow(() -> new IllegalArgumentException("User not found"));
 
-        Notification notification = notificationRepository.findById(id)
+        Notification notification = notificationRepository.findById(Objects.requireNonNull(id))
                 .orElseThrow(() -> new IllegalArgumentException("Notification not found"));
 
         if (!notification.getRecipient().getId().equals(user.getId())) {
@@ -432,7 +433,7 @@ public class NotificationService {
                 n.setRead(true);
             }
         }
-        notificationRepository.saveAll(list);
+        notificationRepository.saveAll(Objects.requireNonNull(list));
     }
 
     @Transactional(readOnly = true)

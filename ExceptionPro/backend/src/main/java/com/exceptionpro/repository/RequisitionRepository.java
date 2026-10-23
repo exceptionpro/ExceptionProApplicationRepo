@@ -31,4 +31,7 @@ public interface RequisitionRepository extends JpaRepository<Requisition, UUID> 
 
     @Query("SELECT DISTINCT r FROM Requisition r LEFT JOIN FETCH r.buyer LEFT JOIN FETCH r.supplier LEFT JOIN FETCH r.items WHERE r.buyer.id = :buyerId AND r.status IN :statuses ORDER BY r.createdAt DESC")
     List<Requisition> findByBuyerIdAndStatusInOrderByCreatedAtDesc(@Param("buyerId") UUID buyerId, @Param("statuses") List<String> statuses);
+
+    @Query("SELECT DISTINCT r FROM Requisition r LEFT JOIN FETCH r.buyer LEFT JOIN FETCH r.supplier LEFT JOIN FETCH r.items WHERE r.collaborationRequisitionId = :collabId ORDER BY r.createdAt DESC")
+    List<Requisition> findByCollaborationRequisitionIdOrderByCreatedAtDesc(@Param("collabId") UUID collabId);
 }
