@@ -131,8 +131,8 @@ public class RequisitionService {
             throw new IllegalArgumentException("You can only edit your own requisitions");
         }
 
-        if ("PO".equalsIgnoreCase(requisition.getStatus())) {
-            throw new IllegalArgumentException("Cannot edit a requisition that has already been converted to Purchase Order (PO)");
+        if ("PO Accepted".equalsIgnoreCase(requisition.getStatus()) || "Accepted".equalsIgnoreCase(requisition.getStatus())) {
+            throw new IllegalArgumentException("Cannot edit a Purchase Order that has already been accepted by the supplier");
         }
 
         validateRequisitionRequest(request);
@@ -189,7 +189,7 @@ public class RequisitionService {
             throw new IllegalArgumentException("You can only delete your own requisitions");
         }
 
-        if ("PO".equalsIgnoreCase(requisition.getStatus())) {
+        if ("PO".equalsIgnoreCase(requisition.getStatus()) || "PO Accepted".equalsIgnoreCase(requisition.getStatus()) || "Accepted".equalsIgnoreCase(requisition.getStatus())) {
             throw new IllegalArgumentException("Cannot delete a requisition that has already been converted to Purchase Order (PO)");
         }
 
@@ -210,7 +210,115 @@ public class RequisitionService {
         requisition.setStatus("PO");
         Requisition saved = requisitionRepository.save(requisition);
 
-        // Send Notification to assigned Supplier(s) now that it has become a Purchase Order
+        sendPoNotificationsToSuppliers(saved, buyer);
+
+        return mapToResponse(saved);
+    }
+
+    public RequisitionResponse copyPurchaseOrder(UUID sourceId, RequisitionRequest request, String buyerEmail) {
+        User buyer = userRepository.findByEmail(buyerEmail)
+                .orElseThrow(() -> new IllegalArgumentException("User not found"));
+
+        if (!List.of("Buyer", "Buyer and Supplier").contains(buyer.getAccountType())) {
+            throw new IllegalArgumentException("Only Buyers or Buyer and Suppliers can copy a Purchase Order");
+        }
+
+        Requisition source = requisitionRepository.findById(Objects.requireNonNull(sourceId))
+                .orElseThrow(() -> new IllegalArgumentException("Source Purchase Order not found"));
+
+        if (!source.getBuyer().getId().equals(buyer.getId())) {
+            throw new IllegalArgumentException("You can only copy your own Purchase Orders");
+        }
+
+        // Title resolution:
+        // If user changed title (non-blank and not equal to source title), use that title.
+        // If user didn't change title (or left it blank), title becomes "copy of " + source.getTitle().
+        String sourceTitle = source.getTitle() != null ? source.getTitle().trim() : "";
+        String requestedTitle = (request != null && request.getTitle() != null) ? request.getTitle().trim() : "";
+        String finalTitle;
+        if (!requestedTitle.isEmpty() && !requestedTitle.equalsIgnoreCase(sourceTitle)) {
+            finalTitle = requestedTitle;
+        } else {
+            finalTitle = "copy of " + (sourceTitle.isEmpty() ? "Purchase Order" : sourceTitle);
+        }
+
+        Requisition newPo = new Requisition();
+        newPo.setId(UUID.randomUUID());
+        newPo.setBuyer(buyer);
+        newPo.setTitle(finalTitle);
+        newPo.setShipTo(request != null && request.getShipTo() != null && !request.getShipTo().trim().isEmpty() ? request.getShipTo().trim() : source.getShipTo());
+        newPo.setDeliverTo(request != null && request.getDeliverTo() != null && !request.getDeliverTo().trim().isEmpty() ? request.getDeliverTo().trim() : source.getDeliverTo());
+        newPo.setNeedByDate(request != null && request.getNeedByDate() != null ? request.getNeedByDate() : source.getNeedByDate());
+        newPo.setComments(request != null && request.getComments() != null ? request.getComments().trim() : source.getComments());
+        newPo.setStatus("PO"); // Directly created as a new PO
+        newPo.setCreatedAt(LocalDateTime.now());
+
+        Integer maxReq = requisitionRepository.findMaxReqNumber();
+        newPo.setReqNumber((maxReq == null) ? 1 : maxReq + 1);
+
+        UUID supplierId = (request != null && request.getSupplierId() != null)
+                ? request.getSupplierId()
+                : (source.getSupplier() != null ? source.getSupplier().getId() : null);
+
+        if (supplierId != null) {
+            User supplier = userRepository.findById(supplierId).orElse(null);
+            newPo.setSupplier(supplier);
+        }
+
+        List<RequisitionItem> itemEntities = new ArrayList<>();
+        if (request != null && request.getItems() != null && !request.getItems().isEmpty()) {
+            for (RequisitionItemDto itemDto : request.getItems()) {
+                RequisitionItem item = new RequisitionItem();
+                item.setId(UUID.randomUUID());
+                item.setRequisition(newPo);
+                item.setItemType(itemDto.getItemType() != null ? itemDto.getItemType() : "NON_CATALOG");
+                item.setCatalogueId(itemDto.getCatalogueId());
+                item.setProductName(itemDto.getProductName());
+                item.setFullDescription(itemDto.getFullDescription());
+                item.setQuantity(itemDto.getQuantity() != null ? itemDto.getQuantity().intValue() : 1);
+                item.setUnitMeasure(itemDto.getUnitMeasure());
+                item.setPrice(itemDto.getPrice());
+                item.setCurrencyType(itemDto.getCurrencyType() != null && !itemDto.getCurrencyType().isBlank() ? itemDto.getCurrencyType().trim() : "USD");
+
+                if (itemDto.getSupplierId() != null) {
+                    User itemSupplier = userRepository.findById(Objects.requireNonNull(itemDto.getSupplierId())).orElse(null);
+                    item.setSupplier(itemSupplier);
+                    if (newPo.getSupplier() == null) {
+                        newPo.setSupplier(itemSupplier);
+                    }
+                } else if (newPo.getSupplier() != null) {
+                    item.setSupplier(newPo.getSupplier());
+                }
+                itemEntities.add(item);
+            }
+        } else if (source.getItems() != null) {
+            for (RequisitionItem sourceItem : source.getItems()) {
+                RequisitionItem item = new RequisitionItem();
+                item.setId(UUID.randomUUID());
+                item.setRequisition(newPo);
+                item.setItemType(sourceItem.getItemType());
+                item.setCatalogueId(sourceItem.getCatalogueId());
+                item.setProductName(sourceItem.getProductName());
+                item.setFullDescription(sourceItem.getFullDescription());
+                item.setQuantity(sourceItem.getQuantity() != null ? sourceItem.getQuantity() : 1);
+                item.setUnitMeasure(sourceItem.getUnitMeasure());
+                item.setPrice(sourceItem.getPrice());
+                item.setCurrencyType(sourceItem.getCurrencyType());
+                item.setSupplier(sourceItem.getSupplier() != null ? sourceItem.getSupplier() : newPo.getSupplier());
+                itemEntities.add(item);
+            }
+        }
+        newPo.setItems(itemEntities);
+
+        Requisition saved = requisitionRepository.save(newPo);
+
+        // Send Notification to assigned Supplier(s) for the newly created Purchase Order
+        sendPoNotificationsToSuppliers(saved, buyer);
+
+        return mapToResponse(saved);
+    }
+
+    private void sendPoNotificationsToSuppliers(Requisition saved, User buyer) {
         Set<User> targetSuppliers = new HashSet<>();
         if (saved.getSupplier() != null) {
             targetSuppliers.add(saved.getSupplier());
@@ -257,8 +365,6 @@ public class RequisitionService {
                     "REQUISITION"
             );
         }
-
-        return mapToResponse(saved);
     }
 
     public List<RequisitionResponse> getSupplierRequisitions(String supplierEmail) {
@@ -269,10 +375,77 @@ public class RequisitionService {
             throw new IllegalArgumentException("Only Suppliers or Buyer and Suppliers can view Purchase Requests");
         }
 
-        List<String> poStatuses = List.of("PO", "Accepted", "Declined");
+        List<String> poStatuses = List.of("PO", "Accepted", "PO Accepted", "Declined", "Cancelled");
         return requisitionRepository.findBySupplierIdAndStatusInOrderByCreatedAtDesc(supplier.getId(), poStatuses).stream()
                 .map(this::mapToResponse)
                 .collect(Collectors.toList());
+    }
+
+    public RequisitionResponse cancelPurchaseOrder(UUID id, String cancellationReason, String buyerEmail) {
+        if (cancellationReason == null || cancellationReason.trim().isEmpty()) {
+            throw new IllegalArgumentException("Reason for Cancellation is required");
+        }
+
+        User buyer = userRepository.findByEmail(buyerEmail)
+                .orElseThrow(() -> new IllegalArgumentException("User not found"));
+
+        if (!List.of("Buyer", "Buyer and Supplier").contains(buyer.getAccountType())) {
+            throw new IllegalArgumentException("Only Buyers or Buyer and Suppliers can cancel a Purchase Order");
+        }
+
+        Requisition requisition = requisitionRepository.findById(Objects.requireNonNull(id))
+                .orElseThrow(() -> new IllegalArgumentException("Purchase Order not found"));
+
+        if (!requisition.getBuyer().getId().equals(buyer.getId())) {
+            throw new IllegalArgumentException("You can only cancel your own Purchase Orders");
+        }
+
+        if ("Cancelled".equalsIgnoreCase(requisition.getStatus())) {
+            throw new IllegalArgumentException("This Purchase Order is already cancelled");
+        }
+
+        String reason = cancellationReason.trim();
+        if (reason.length() > 500) {
+            reason = reason.substring(0, 500);
+        }
+
+        requisition.setStatus("Cancelled");
+        requisition.setCancellationReason(reason);
+
+        Requisition saved = requisitionRepository.save(requisition);
+
+        // Notify assigned Supplier(s)
+        Set<User> targetSuppliers = new HashSet<>();
+        if (saved.getSupplier() != null) {
+            targetSuppliers.add(saved.getSupplier());
+        }
+        if (saved.getItems() != null) {
+            for (RequisitionItem item : saved.getItems()) {
+                if (item.getSupplier() != null) {
+                    targetSuppliers.add(item.getSupplier());
+                }
+            }
+        }
+
+        int reqNum = (saved.getReqNumber() != null) ? saved.getReqNumber() : 1;
+        String poCode = String.format("PO%02d", reqNum);
+        String buyerName = getUserDisplayName(buyer);
+
+        for (User targetSupplier : targetSuppliers) {
+            String notificationMsg = "Buyer " + buyerName + " cancelled Purchase Order " + poCode + " ('" + saved.getTitle() + "'). Reason for Cancellation: " + reason;
+            notificationService.createNotification(
+                    targetSupplier,
+                    buyer,
+                    "REQUISITIONS",
+                    "Purchase Order Cancelled (" + poCode + ")",
+                    notificationMsg,
+                    reason,
+                    saved.getId(),
+                    "REQUISITION"
+            );
+        }
+
+        return mapToResponse(saved);
     }
 
     public RequisitionResponse acceptRequisition(UUID id, String supplierComment, String supplierEmail) {
@@ -286,11 +459,15 @@ public class RequisitionService {
         Requisition requisition = requisitionRepository.findById(Objects.requireNonNull(id))
                 .orElseThrow(() -> new IllegalArgumentException("Requisition not found"));
 
+        if ("Cancelled".equalsIgnoreCase(requisition.getStatus())) {
+            throw new IllegalArgumentException("Cannot accept a cancelled Purchase Order");
+        }
+
         if (requisition.getSupplier() == null || !requisition.getSupplier().getId().equals(supplier.getId())) {
             throw new IllegalArgumentException("You are not assigned as the supplier for this requisition");
         }
 
-        requisition.setStatus("Accepted");
+        requisition.setStatus("PO Accepted");
         if (supplierComment.length() > 400) {
             requisition.setSupplierComment(supplierComment.substring(0, 400));
         } else {
@@ -300,7 +477,7 @@ public class RequisitionService {
         Requisition saved = requisitionRepository.save(requisition);
 
         // Send Notification to Buyer
-        notificationService.sendOrUpdateBuyerPurchaseOrderNotification(saved, supplier, "Accepted");
+        notificationService.sendOrUpdateBuyerPurchaseOrderNotification(saved, supplier, "PO Accepted");
 
         return mapToResponse(saved);
     }
@@ -315,6 +492,10 @@ public class RequisitionService {
 
         Requisition requisition = requisitionRepository.findById(Objects.requireNonNull(id))
                 .orElseThrow(() -> new IllegalArgumentException("Requisition not found"));
+
+        if ("Cancelled".equalsIgnoreCase(requisition.getStatus())) {
+            throw new IllegalArgumentException("Cannot decline a cancelled Purchase Order");
+        }
 
         if (requisition.getSupplier() == null || !requisition.getSupplier().getId().equals(supplier.getId())) {
             throw new IllegalArgumentException("You are not assigned as the supplier for this requisition");
@@ -424,7 +605,7 @@ public class RequisitionService {
 
         int reqNum = (r.getReqNumber() != null) ? r.getReqNumber().intValue() : 1;
         String status = r.getStatus();
-        String prefix = ("PO".equalsIgnoreCase(status) || "Accepted".equalsIgnoreCase(status) || "Declined".equalsIgnoreCase(status)) ? "PO" : "PR";
+        String prefix = ("PO".equalsIgnoreCase(status) || "Accepted".equalsIgnoreCase(status) || "PO Accepted".equalsIgnoreCase(status) || "Declined".equalsIgnoreCase(status) || "Cancelled".equalsIgnoreCase(status)) ? "PO" : "PR";
         String requisitionId = String.format("%s%02d", prefix, reqNum);
 
         return new RequisitionResponse(
@@ -437,6 +618,7 @@ public class RequisitionService {
                 r.getNeedByDate(),
                 r.getComments(),
                 r.getSupplierComment(),
+                r.getCancellationReason(),
                 r.getStatus(),
                 r.getCreatedAt(),
                 r.getBuyer().getId(),

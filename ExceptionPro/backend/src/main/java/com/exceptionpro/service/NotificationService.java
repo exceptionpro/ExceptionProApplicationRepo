@@ -186,7 +186,7 @@ public class NotificationService {
 
     private void syncBuyerPurchaseOrderNotifications(User buyer) {
         try {
-            List<String> poStatuses = List.of("Accepted", "Declined");
+            List<String> poStatuses = List.of("Accepted", "PO Accepted", "Declined");
             List<Requisition> buyerPOs = requisitionRepository.findByBuyerIdAndStatusInOrderByCreatedAtDesc(buyer.getId(), poStatuses);
             if (buyerPOs == null || buyerPOs.isEmpty()) {
                 return;
@@ -279,7 +279,7 @@ public class NotificationService {
             }
 
             // Sync Purchase Orders (requisitions converted to PO, Accepted, or Declined)
-            List<String> poStatuses = List.of("PO", "Accepted", "Declined");
+            List<String> poStatuses = List.of("PO", "Accepted", "PO Accepted", "Declined");
             List<Requisition> supplierPOs = requisitionRepository.findAllBySupplierIdAndStatusInOrderByCreatedAtDesc(user.getId(), poStatuses);
             if (supplierPOs == null || supplierPOs.isEmpty()) {
                 return;

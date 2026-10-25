@@ -13,6 +13,10 @@ public class InvoiceRequest {
     private LocalDate invoiceDate;
     private LocalDate dueDate;
     private BigDecimal totalAmount;
+    private BigDecimal poAmount;
+    private BigDecimal taxPercentage;
+    private BigDecimal taxAmount;
+    private String currencyType = "USD";
     private String notes;
 
     public String getRequestType() {
@@ -77,5 +81,37 @@ public class InvoiceRequest {
 
     public void setNotes(String notes) {
         this.notes = notes;
+    }
+
+    public String getCurrencyType() {
+        return currencyType;
+    }
+
+    public void setCurrencyType(String currencyType) {
+        this.currencyType = currencyType;
+    }
+
+    public BigDecimal getPoAmount() {
+        return poAmount;
+    }
+
+    public void setPoAmount(BigDecimal poAmount) {
+        this.poAmount = poAmount;
+    }
+
+    public BigDecimal getTaxPercentage() {
+        return taxPercentage;
+    }
+
+    public void setTaxPercentage(BigDecimal taxPercentage) {
+        this.taxPercentage = taxPercentage;
+    }
+
+    public BigDecimal getTaxAmount() {
+        return taxAmount;
+    }
+
+    public void setTaxAmount(BigDecimal taxAmount) {
+        this.taxAmount = taxAmount;
     }
 }

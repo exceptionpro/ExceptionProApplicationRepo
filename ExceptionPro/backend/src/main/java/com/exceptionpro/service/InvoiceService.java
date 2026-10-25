@@ -1,13 +1,5 @@
 package com.exceptionpro.service;
 
-import com.exceptionpro.dto.EligibleRequestResponse;
-import com.exceptionpro.dto.InvoiceRequest;
-import com.exceptionpro.dto.InvoiceResponse;
-import com.exceptionpro.entity.*;
-import com.exceptionpro.repository.*;
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
-
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -15,6 +7,27 @@ import java.util.List;
 import java.util.Objects;
 import java.util.UUID;
 import java.util.stream.Collectors;
+
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import com.exceptionpro.dto.EligibleRequestResponse;
+import com.exceptionpro.dto.InvoiceItemResponse;
+import com.exceptionpro.dto.InvoiceRequest;
+import com.exceptionpro.dto.InvoiceResponse;
+import com.exceptionpro.entity.CollaborationProposal;
+import com.exceptionpro.entity.CollaborationRequisition;
+import com.exceptionpro.entity.CollaborationRequisitionItem;
+import com.exceptionpro.entity.CorporateProfile;
+import com.exceptionpro.entity.Invoice;
+import com.exceptionpro.entity.Requisition;
+import com.exceptionpro.entity.RequisitionItem;
+import com.exceptionpro.entity.User;
+import com.exceptionpro.repository.CollaborationProposalRepository;
+import com.exceptionpro.repository.CollaborationRequisitionRepository;
+import com.exceptionpro.repository.InvoiceRepository;
+import com.exceptionpro.repository.RequisitionRepository;
+import com.exceptionpro.repository.UserRepository;
 
 @Service
 @Transactional
@@ -53,7 +66,7 @@ public class InvoiceService {
 
         // 1. Accepted Standard Purchase Requests
         List<Requisition> standardAccepted = requisitionRepository.findBySupplierIdAndStatusInOrderByCreatedAtDesc(
-                supplier.getId(), List.of("Accepted")
+                supplier.getId(), List.of("Accepted", "PO Accepted")
         );
 
         for (Requisition r : standardAccepted) {
@@ -62,6 +75,14 @@ public class InvoiceService {
             BigDecimal total = r.getItems() != null ? r.getItems().stream()
                     .map(i -> i.getPrice() != null ? i.getPrice().multiply(BigDecimal.valueOf(i.getQuantity() != null ? i.getQuantity().longValue() : 1L)) : BigDecimal.ZERO)
                     .reduce(BigDecimal.ZERO, (a, b) -> a.add(b)) : BigDecimal.ZERO;
+
+            String currencyType = (r.getItems() != null && !r.getItems().isEmpty())
+                    ? r.getItems().stream()
+                            .map(RequisitionItem::getCurrencyType)
+                            .filter(c -> c != null && !c.isBlank())
+                            .findFirst()
+                            .orElse("USD")
+                    : "USD";
 
             list.add(new EligibleRequestResponse(
                     r.getId(),
@@ -72,6 +93,7 @@ public class InvoiceService {
                     getUserDisplayName(r.getBuyer()),
                     r.getBuyer().getEmail(),
                     total,
+                    currencyType,
                     r.getItems() != null ? r.getItems().size() : 0,
                     r.getNeedByDate()
             ));
@@ -89,6 +111,14 @@ public class InvoiceService {
                         .map(i -> i.getPrice() != null ? i.getPrice().multiply(BigDecimal.valueOf(i.getQuantity() != null ? i.getQuantity().longValue() : 1L)) : BigDecimal.ZERO)
                         .reduce(BigDecimal.ZERO, (a, b) -> a.add(b)) : BigDecimal.ZERO;
 
+                String currencyType = (c.getItems() != null && !c.getItems().isEmpty())
+                        ? c.getItems().stream()
+                                .map(CollaborationRequisitionItem::getCurrencyType)
+                                .filter(cType -> cType != null && !cType.isBlank())
+                                .findFirst()
+                                .orElse("USD")
+                        : "USD";
+
                 list.add(new EligibleRequestResponse(
                         c.getId(),
                         "COLLABORATION",
@@ -98,6 +128,7 @@ public class InvoiceService {
                         getUserDisplayName(c.getBuyer()),
                         c.getBuyer().getEmail(),
                         total,
+                        currencyType,
                         c.getItems() != null ? c.getItems().size() : 0,
                         c.getNeedByDate()
                 ));
@@ -142,6 +173,15 @@ public class InvoiceService {
         invoice.setInvoiceDate(request.getInvoiceDate());
         invoice.setDueDate(request.getDueDate());
         invoice.setTotalAmount(request.getTotalAmount());
+        BigDecimal poAmt = request.getPoAmount() != null ? request.getPoAmount() : request.getTotalAmount();
+        BigDecimal taxPct = request.getTaxPercentage() != null ? request.getTaxPercentage() : BigDecimal.ZERO;
+        BigDecimal taxAmt = request.getTaxAmount() != null ? request.getTaxAmount() :
+                (poAmt != null && taxPct != null && taxPct.compareTo(BigDecimal.ZERO) > 0 ?
+                        poAmt.multiply(taxPct).divide(BigDecimal.valueOf(100), 2, java.math.RoundingMode.HALF_UP) : BigDecimal.ZERO);
+        invoice.setPoAmount(poAmt);
+        invoice.setTaxPercentage(taxPct);
+        invoice.setTaxAmount(taxAmt);
+        invoice.setCurrencyType(request.getCurrencyType() != null && !request.getCurrencyType().isBlank() ? request.getCurrencyType().trim() : "USD");
         invoice.setNotes(request.getNotes());
         invoice.setStatus("Submitted");
         invoice.setCreatedAt(LocalDateTime.now());
@@ -186,7 +226,11 @@ public class InvoiceService {
             Requisition req = requisitionRepository.findById(Objects.requireNonNull(reqId))
                     .orElseThrow(() -> new IllegalArgumentException("Requisition not found"));
 
-            if (!"Accepted".equalsIgnoreCase(req.getStatus())) {
+            if ("Cancelled".equalsIgnoreCase(req.getStatus())) {
+                throw new IllegalArgumentException("Cannot create invoice for a cancelled Purchase Order");
+            }
+
+            if (!"Accepted".equalsIgnoreCase(req.getStatus()) && !"PO Accepted".equalsIgnoreCase(req.getStatus())) {
                 throw new IllegalArgumentException("Invoices can only be created for Accepted Purchase Requests or Collaboration Requests");
             }
 
@@ -205,7 +249,7 @@ public class InvoiceService {
 
         // Send Notification to Buyer
         String supplierName = getUserDisplayName(supplier);
-        String msg = "Supplier " + supplierName + " created Invoice " + saved.getInvoiceNumber() + " ($" + saved.getTotalAmount() + ") for Accepted Request '" + requestTitle + "'.";
+        String msg = "Supplier " + supplierName + " created Invoice " + saved.getInvoiceNumber() + " (" + saved.getCurrencyType() + " " + saved.getTotalAmount() + ") for Accepted Request '" + requestTitle + "'.";
         notificationService.createNotification(
                 buyer,
                 supplier,
@@ -257,6 +301,20 @@ public class InvoiceService {
         if (request.getTotalAmount() != null && request.getTotalAmount().compareTo(BigDecimal.ZERO) >= 0) {
             invoice.setTotalAmount(request.getTotalAmount());
         }
+        if (request.getPoAmount() != null && request.getPoAmount().compareTo(BigDecimal.ZERO) >= 0) {
+            invoice.setPoAmount(request.getPoAmount());
+        }
+        if (request.getTaxPercentage() != null && request.getTaxPercentage().compareTo(BigDecimal.ZERO) >= 0) {
+            invoice.setTaxPercentage(request.getTaxPercentage());
+        }
+        if (request.getTaxAmount() != null && request.getTaxAmount().compareTo(BigDecimal.ZERO) >= 0) {
+            invoice.setTaxAmount(request.getTaxAmount());
+        } else if (invoice.getPoAmount() != null && invoice.getTaxPercentage() != null) {
+            invoice.setTaxAmount(invoice.getPoAmount().multiply(invoice.getTaxPercentage()).divide(BigDecimal.valueOf(100), 2, java.math.RoundingMode.HALF_UP));
+        }
+        if (request.getCurrencyType() != null && !request.getCurrencyType().isBlank()) {
+            invoice.setCurrencyType(request.getCurrencyType().trim());
+        }
         if (request.getNotes() != null) {
             invoice.setNotes(request.getNotes());
         }
@@ -270,7 +328,7 @@ public class InvoiceService {
         String supplierName = getUserDisplayName(supplier);
         String requestTitle = updated.getRequisition() != null ? updated.getRequisition().getTitle() :
                 (updated.getCollaborationRequisition() != null ? updated.getCollaborationRequisition().getTitle() : "");
-        String msg = "Supplier " + supplierName + " updated Invoice " + updated.getInvoiceNumber() + " ($" + updated.getTotalAmount() + ") for Request '" + requestTitle + "'.";
+        String msg = "Supplier " + supplierName + " updated Invoice " + updated.getInvoiceNumber() + " (" + updated.getCurrencyType() + " " + updated.getTotalAmount() + ") for Request '" + requestTitle + "'.";
         
         notificationService.createNotification(
                 updated.getBuyer(),
@@ -316,14 +374,40 @@ public class InvoiceService {
         String title = "";
         String code = "";
 
+        List<InvoiceItemResponse> items = new ArrayList<>();
         if (inv.getRequisition() != null) {
             title = inv.getRequisition().getTitle();
             int num = (inv.getRequisition().getReqNumber() != null) ? inv.getRequisition().getReqNumber().intValue() : 1;
             code = String.format("PO%02d", num);
+            if (inv.getRequisition().getItems() != null) {
+                for (RequisitionItem item : inv.getRequisition().getItems()) {
+                    items.add(new InvoiceItemResponse(
+                            item.getProductName(),
+                            item.getQuantity(),
+                            item.getPrice(),
+                            item.getCurrencyType(),
+                            item.getUnitMeasure()
+                    ));
+                }
+            }
         } else if (inv.getCollaborationRequisition() != null) {
             title = inv.getCollaborationRequisition().getTitle();
             code = "COLLAB";
+            if (inv.getCollaborationRequisition().getItems() != null) {
+                for (CollaborationRequisitionItem item : inv.getCollaborationRequisition().getItems()) {
+                    items.add(new InvoiceItemResponse(
+                            item.getProductName(),
+                            item.getQuantity(),
+                            item.getPrice(),
+                            item.getCurrencyType(),
+                            item.getUnitMeasure()
+                    ));
+                }
+            }
         }
+
+        String supplierAddress = getUserAddress(inv.getSupplier());
+        String buyerAddress = getUserAddress(inv.getBuyer());
 
         return new InvoiceResponse(
                 inv.getId(),
@@ -336,16 +420,58 @@ public class InvoiceService {
                 inv.getSupplier().getId(),
                 getUserDisplayName(inv.getSupplier()),
                 inv.getSupplier().getEmail(),
+                supplierAddress,
                 inv.getBuyer().getId(),
                 getUserDisplayName(inv.getBuyer()),
                 inv.getBuyer().getEmail(),
+                buyerAddress,
                 inv.getInvoiceDate(),
                 inv.getDueDate(),
                 inv.getTotalAmount(),
+                inv.getPoAmount() != null ? inv.getPoAmount() : inv.getTotalAmount(),
+                inv.getTaxPercentage() != null ? inv.getTaxPercentage() : BigDecimal.ZERO,
+                inv.getTaxAmount() != null ? inv.getTaxAmount() : BigDecimal.ZERO,
+                inv.getCurrencyType() != null ? inv.getCurrencyType() : "USD",
                 inv.getNotes(),
                 inv.getStatus(),
-                inv.getCreatedAt()
+                inv.getCreatedAt(),
+                items
         );
+    }
+
+    private String getUserAddress(User u) {
+        if (u == null) return "Address not specified";
+        try {
+            User fullUser = u;
+            if (u.getId() != null) {
+                fullUser = userRepository.findByIdFetchProfiles(u.getId()).orElse(u);
+            }
+            if (fullUser.getCorporateProfile() != null) {
+                CorporateProfile cp = fullUser.getCorporateProfile();
+                List<String> parts = new ArrayList<>();
+                if (cp.getStreetAddress() != null && !cp.getStreetAddress().isBlank()) {
+                    parts.add(cp.getStreetAddress().trim());
+                }
+                if (cp.getCity() != null && !cp.getCity().isBlank()) {
+                    parts.add(cp.getCity().trim());
+                }
+                if (cp.getState() != null && !cp.getState().isBlank()) {
+                    parts.add(cp.getState().trim());
+                }
+                if (cp.getCountry() != null && !cp.getCountry().isBlank()) {
+                    parts.add(cp.getCountry().trim());
+                }
+                if (cp.getPincode() != null && !cp.getPincode().isBlank()) {
+                    parts.add(cp.getPincode().trim());
+                }
+                if (!parts.isEmpty()) {
+                    return String.join(", ", parts);
+                }
+            }
+        } catch (Exception e) {
+            // Ignore lazy loading issue
+        }
+        return "Address not specified";
     }
 
     private String getUserDisplayName(User u) {

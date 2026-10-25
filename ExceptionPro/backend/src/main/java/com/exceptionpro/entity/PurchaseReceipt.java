@@ -1,9 +1,16 @@
 package com.exceptionpro.entity;
 
-import jakarta.persistence.*;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.UUID;
+
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.FetchType;
+import jakarta.persistence.Id;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.ManyToOne;
+import jakarta.persistence.Table;
 
 @Entity
 @Table(name = "purchase_receipts")
@@ -37,8 +44,32 @@ public class PurchaseReceipt {
     @Column(nullable = false)
     private Integer quantity;
 
+    @Column(name = "po_quantity")
+    private Integer poQuantity;
+
+    @Column(name = "received_quantity")
+    private Integer receivedQuantity;
+
+    @Column(name = "pending_quantity")
+    private Integer pendingQuantity;
+
     @Column(name = "received_status", nullable = false, length = 50)
     private String receivedStatus; // "Partial Received" or "Fully Received"
+
+    @Column(name = "supplier_approval_status", length = 50)
+    private String supplierApprovalStatus = "Pending Approval";
+
+    @Column(name = "supplier_confirmation_message", columnDefinition = "TEXT")
+    private String supplierConfirmationMessage;
+
+    @Column(name = "supplier_approved_pending_quantity")
+    private Integer supplierApprovedPendingQuantity;
+
+    @Column(name = "supplier_approved_at")
+    private LocalDateTime supplierApprovedAt;
+
+    @Column(name = "supplier_comments", columnDefinition = "TEXT")
+    private String supplierComments;
 
     @Column(name = "created_at", nullable = false)
     private LocalDateTime createdAt = LocalDateTime.now();
@@ -110,6 +141,30 @@ public class PurchaseReceipt {
         this.quantity = quantity;
     }
 
+    public Integer getPoQuantity() {
+        return poQuantity;
+    }
+
+    public void setPoQuantity(Integer poQuantity) {
+        this.poQuantity = poQuantity;
+    }
+
+    public Integer getReceivedQuantity() {
+        return receivedQuantity;
+    }
+
+    public void setReceivedQuantity(Integer receivedQuantity) {
+        this.receivedQuantity = receivedQuantity;
+    }
+
+    public Integer getPendingQuantity() {
+        return pendingQuantity;
+    }
+
+    public void setPendingQuantity(Integer pendingQuantity) {
+        this.pendingQuantity = pendingQuantity;
+    }
+
     public String getReceivedStatus() {
         return receivedStatus;
     }
@@ -132,5 +187,45 @@ public class PurchaseReceipt {
 
     public void setUpdatedAt(LocalDateTime updatedAt) {
         this.updatedAt = updatedAt;
+    }
+
+    public String getSupplierApprovalStatus() {
+        return supplierApprovalStatus;
+    }
+
+    public void setSupplierApprovalStatus(String supplierApprovalStatus) {
+        this.supplierApprovalStatus = supplierApprovalStatus;
+    }
+
+    public String getSupplierConfirmationMessage() {
+        return supplierConfirmationMessage;
+    }
+
+    public void setSupplierConfirmationMessage(String supplierConfirmationMessage) {
+        this.supplierConfirmationMessage = supplierConfirmationMessage;
+    }
+
+    public Integer getSupplierApprovedPendingQuantity() {
+        return supplierApprovedPendingQuantity;
+    }
+
+    public void setSupplierApprovedPendingQuantity(Integer supplierApprovedPendingQuantity) {
+        this.supplierApprovedPendingQuantity = supplierApprovedPendingQuantity;
+    }
+
+    public LocalDateTime getSupplierApprovedAt() {
+        return supplierApprovedAt;
+    }
+
+    public void setSupplierApprovedAt(LocalDateTime supplierApprovedAt) {
+        this.supplierApprovedAt = supplierApprovedAt;
+    }
+
+    public String getSupplierComments() {
+        return supplierComments;
+    }
+
+    public void setSupplierComments(String supplierComments) {
+        this.supplierComments = supplierComments;
     }
 }

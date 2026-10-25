@@ -24,6 +24,7 @@ interface RequisitionData {
   deliverTo: string;
   needByDate: string;
   comments: string;
+  cancellationReason?: string;
   status: string;
   createdAt: string;
   buyerId: string;
@@ -112,7 +113,10 @@ const RequestNotificationPage: React.FC = () => {
   };
 
   const getStatusBadge = (status: string) => {
-    if (status === 'Accepted') {
+    if (status === 'Cancelled') {
+      return <span className="badge" style={{ background: 'rgba(239, 68, 68, 0.2)', color: '#ef4444', padding: '0.25rem 0.6rem', borderRadius: '4px', fontWeight: 600 }}>Cancelled</span>;
+    }
+    if (status === 'Accepted' || status === 'PO Accepted') {
       return <span className="badge" style={{ background: 'rgba(16, 185, 129, 0.2)', color: '#10b981', padding: '0.25rem 0.6rem', borderRadius: '4px', fontWeight: 600 }}>Accepted</span>;
     }
     if (status === 'Declined') {
@@ -211,6 +215,24 @@ const RequestNotificationPage: React.FC = () => {
                     </div>
                   </div>
 
+                  {req.status === 'Cancelled' && (
+                    <div
+                      style={{
+                        background: 'rgba(239, 68, 68, 0.08)',
+                        border: '1px solid rgba(239, 68, 68, 0.3)',
+                        borderRadius: '8px',
+                        padding: '0.75rem 1rem',
+                        fontSize: '0.875rem',
+                        color: '#ef4444',
+                      }}
+                    >
+                      <strong style={{ display: 'block', marginBottom: '0.2rem', color: '#dc2626' }}>
+                        Reason for Cancellation:
+                      </strong>
+                      <span>{req.cancellationReason || 'No reason provided'}</span>
+                    </div>
+                  )}
+
                   {/* Action Buttons available just below each Request Notification Record */}
                   <div
                     style={{
@@ -225,10 +247,11 @@ const RequestNotificationPage: React.FC = () => {
                       overflowX: 'auto',
                     }}
                   >
-                    {req.status !== 'Accepted' && req.status !== 'Declined' && (
+                    {req.status !== 'Accepted' && req.status !== 'PO Accepted' && req.status !== 'Declined' && (
                       <>
                         <button
                           className="btn"
+                          disabled={req.status === 'Cancelled'}
                           style={{
                             width: '140px',
                             minWidth: '140px',
@@ -241,18 +264,22 @@ const RequestNotificationPage: React.FC = () => {
                             color: '#fff',
                             border: 'none',
                             borderRadius: '6px',
-                            cursor: 'pointer',
+                            cursor: req.status === 'Cancelled' ? 'not-allowed' : 'pointer',
                             fontWeight: 600,
                             whiteSpace: 'nowrap',
                             flexShrink: 0,
                             boxSizing: 'border-box',
+                            opacity: req.status === 'Cancelled' ? 0.45 : 1,
+                            filter: req.status === 'Cancelled' ? 'saturate(70%) brightness(0.85)' : 'none',
                           }}
-                          onClick={() => openActionModal(req, 'Accept')}
+                          onClick={() => req.status !== 'Cancelled' && openActionModal(req, 'Accept')}
+                          title={req.status === 'Cancelled' ? 'Cannot accept: Purchase Order has been cancelled' : 'Accept'}
                         >
                           Accept
                         </button>
                         <button
                           className="btn"
+                          disabled={req.status === 'Cancelled'}
                           style={{
                             width: '140px',
                             minWidth: '140px',
@@ -265,13 +292,16 @@ const RequestNotificationPage: React.FC = () => {
                             color: '#fff',
                             border: 'none',
                             borderRadius: '6px',
-                            cursor: 'pointer',
+                            cursor: req.status === 'Cancelled' ? 'not-allowed' : 'pointer',
                             fontWeight: 600,
                             whiteSpace: 'nowrap',
                             flexShrink: 0,
                             boxSizing: 'border-box',
+                            opacity: req.status === 'Cancelled' ? 0.45 : 1,
+                            filter: req.status === 'Cancelled' ? 'saturate(70%) brightness(0.85)' : 'none',
                           }}
-                          onClick={() => openActionModal(req, 'Decline')}
+                          onClick={() => req.status !== 'Cancelled' && openActionModal(req, 'Decline')}
+                          title={req.status === 'Cancelled' ? 'Cannot decline: Purchase Order has been cancelled' : 'Decline'}
                         >
                           Decline
                         </button>
@@ -323,6 +353,29 @@ const RequestNotificationPage: React.FC = () => {
                 {getStatusBadge(viewingReq.status)}
               </div>
             </div>
+
+            {viewingReq.status === 'Cancelled' && (
+              <div
+                style={{
+                  background: 'rgba(239, 68, 68, 0.08)',
+                  border: '1px solid rgba(239, 68, 68, 0.3)',
+                  borderRadius: '8px',
+                  padding: '1rem',
+                  marginBottom: '1.25rem',
+                  color: '#ef4444',
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.35rem' }}>
+                  <span style={{ fontSize: '1rem', fontWeight: 700, color: '#dc2626' }}>
+                    Purchase Order Cancelled by Buyer
+                  </span>
+                </div>
+                <div style={{ fontSize: '0.9rem', color: 'var(--text-primary)' }}>
+                  <strong style={{ color: '#dc2626' }}>Reason for Cancellation: </strong>
+                  {viewingReq.cancellationReason || 'No reason specified'}
+                </div>
+              </div>
+            )}
 
             {/* Requisition Header & Buyer Details */}
             <div style={{ background: 'var(--bg-secondary)', padding: '1rem', borderRadius: '8px', border: '1px solid var(--border-color)', marginBottom: '1.5rem', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '0.75rem', fontSize: '0.875rem' }}>
@@ -408,21 +461,47 @@ const RequestNotificationPage: React.FC = () => {
 
             {/* Modal Footer Actions */}
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem' }}>
-              {viewingReq.status !== 'Accepted' && viewingReq.status !== 'Declined' && (
+              {viewingReq.status !== 'Accepted' && viewingReq.status !== 'PO Accepted' && viewingReq.status !== 'Declined' && (
                 <>
                   <button
                     type="button"
                     className="btn"
-                    style={{ padding: '0.5rem 1.25rem', fontSize: '0.875rem', background: '#10b981', color: '#fff', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 600 }}
-                    onClick={() => openActionModal(viewingReq, 'Accept')}
+                    disabled={viewingReq.status === 'Cancelled'}
+                    style={{
+                      padding: '0.5rem 1.25rem',
+                      fontSize: '0.875rem',
+                      background: '#10b981',
+                      color: '#fff',
+                      border: 'none',
+                      borderRadius: '6px',
+                      cursor: viewingReq.status === 'Cancelled' ? 'not-allowed' : 'pointer',
+                      fontWeight: 600,
+                      opacity: viewingReq.status === 'Cancelled' ? 0.45 : 1,
+                      filter: viewingReq.status === 'Cancelled' ? 'saturate(70%) brightness(0.85)' : 'none',
+                    }}
+                    onClick={() => viewingReq.status !== 'Cancelled' && openActionModal(viewingReq, 'Accept')}
+                    title={viewingReq.status === 'Cancelled' ? 'Cannot accept: Purchase Order has been cancelled' : 'Accept Request'}
                   >
                     Accept Request
                   </button>
                   <button
                     type="button"
                     className="btn"
-                    style={{ padding: '0.5rem 1.25rem', fontSize: '0.875rem', background: '#ef4444', color: '#fff', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 600 }}
-                    onClick={() => openActionModal(viewingReq, 'Decline')}
+                    disabled={viewingReq.status === 'Cancelled'}
+                    style={{
+                      padding: '0.5rem 1.25rem',
+                      fontSize: '0.875rem',
+                      background: '#ef4444',
+                      color: '#fff',
+                      border: 'none',
+                      borderRadius: '6px',
+                      cursor: viewingReq.status === 'Cancelled' ? 'not-allowed' : 'pointer',
+                      fontWeight: 600,
+                      opacity: viewingReq.status === 'Cancelled' ? 0.45 : 1,
+                      filter: viewingReq.status === 'Cancelled' ? 'saturate(70%) brightness(0.85)' : 'none',
+                    }}
+                    onClick={() => viewingReq.status !== 'Cancelled' && openActionModal(viewingReq, 'Decline')}
+                    title={viewingReq.status === 'Cancelled' ? 'Cannot decline: Purchase Order has been cancelled' : 'Decline Request'}
                   >
                     Decline Request
                   </button>

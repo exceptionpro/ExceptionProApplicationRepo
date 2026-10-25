@@ -14,6 +14,7 @@ public class EligibleRequestResponse {
     private String buyerName;
     private String buyerEmail;
     private BigDecimal totalAmount;
+    private String currencyType = "USD";
     private int itemCount;
     private LocalDate needByDate;
 
@@ -21,6 +22,11 @@ public class EligibleRequestResponse {
 
     public EligibleRequestResponse(UUID id, String requestType, String code, String title, UUID buyerId,
                                    String buyerName, String buyerEmail, BigDecimal totalAmount, int itemCount, LocalDate needByDate) {
+        this(id, requestType, code, title, buyerId, buyerName, buyerEmail, totalAmount, "USD", itemCount, needByDate);
+    }
+
+    public EligibleRequestResponse(UUID id, String requestType, String code, String title, UUID buyerId,
+                                   String buyerName, String buyerEmail, BigDecimal totalAmount, String currencyType, int itemCount, LocalDate needByDate) {
         this.id = id;
         this.requestType = requestType;
         this.code = code;
@@ -29,6 +35,7 @@ public class EligibleRequestResponse {
         this.buyerName = buyerName;
         this.buyerEmail = buyerEmail;
         this.totalAmount = totalAmount;
+        this.currencyType = currencyType != null && !currencyType.isBlank() ? currencyType : "USD";
         this.itemCount = itemCount;
         this.needByDate = needByDate;
     }
@@ -111,5 +118,13 @@ public class EligibleRequestResponse {
 
     public void setNeedByDate(LocalDate needByDate) {
         this.needByDate = needByDate;
+    }
+
+    public String getCurrencyType() {
+        return currencyType;
+    }
+
+    public void setCurrencyType(String currencyType) {
+        this.currencyType = currencyType;
     }
 }

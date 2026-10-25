@@ -1,10 +1,17 @@
 package com.exceptionpro.entity;
 
-import jakarta.persistence.*;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.UUID;
+
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.FetchType;
+import jakarta.persistence.Id;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.ManyToOne;
+import jakarta.persistence.Table;
 
 @Entity
 @Table(name = "invoices")
@@ -43,6 +50,18 @@ public class Invoice {
 
     @Column(name = "total_amount", nullable = false, precision = 10, scale = 2)
     private BigDecimal totalAmount;
+
+    @Column(name = "po_amount", precision = 10, scale = 2)
+    private BigDecimal poAmount;
+
+    @Column(name = "tax_percentage", precision = 10, scale = 2)
+    private BigDecimal taxPercentage;
+
+    @Column(name = "tax_amount", precision = 10, scale = 2)
+    private BigDecimal taxAmount;
+
+    @Column(name = "currency_type")
+    private String currencyType = "USD";
 
     @Column(columnDefinition = "TEXT")
     private String notes;
@@ -155,5 +174,37 @@ public class Invoice {
 
     public void setCreatedAt(LocalDateTime createdAt) {
         this.createdAt = createdAt;
+    }
+
+    public String getCurrencyType() {
+        return currencyType;
+    }
+
+    public void setCurrencyType(String currencyType) {
+        this.currencyType = currencyType;
+    }
+
+    public BigDecimal getPoAmount() {
+        return poAmount;
+    }
+
+    public void setPoAmount(BigDecimal poAmount) {
+        this.poAmount = poAmount;
+    }
+
+    public BigDecimal getTaxPercentage() {
+        return taxPercentage;
+    }
+
+    public void setTaxPercentage(BigDecimal taxPercentage) {
+        this.taxPercentage = taxPercentage;
+    }
+
+    public BigDecimal getTaxAmount() {
+        return taxAmount;
+    }
+
+    public void setTaxAmount(BigDecimal taxAmount) {
+        this.taxAmount = taxAmount;
     }
 }

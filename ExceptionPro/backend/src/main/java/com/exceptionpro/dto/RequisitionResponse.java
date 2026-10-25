@@ -16,6 +16,7 @@ public class RequisitionResponse {
     private LocalDate needByDate;
     private String comments;
     private String supplierComment;
+    private String cancellationReason;
     private String status;
     private LocalDateTime createdAt;
     private UUID buyerId;
@@ -29,7 +30,7 @@ public class RequisitionResponse {
     public RequisitionResponse() {}
 
     public RequisitionResponse(UUID id, String requisitionId, Integer reqNumber, String title, String shipTo, String deliverTo, LocalDate needByDate,
-                               String comments, String supplierComment, String status, LocalDateTime createdAt, UUID buyerId,
+                               String comments, String supplierComment, String cancellationReason, String status, LocalDateTime createdAt, UUID buyerId,
                                String buyerEmail, String buyerName, UUID supplierId, String supplierEmail,
                                String supplierName, List<RequisitionItemDto> items) {
         this.id = id;
@@ -41,6 +42,7 @@ public class RequisitionResponse {
         this.needByDate = needByDate;
         this.comments = comments;
         this.supplierComment = supplierComment;
+        this.cancellationReason = cancellationReason;
         this.status = status;
         this.createdAt = createdAt;
         this.buyerId = buyerId;
@@ -52,11 +54,18 @@ public class RequisitionResponse {
         this.items = items;
     }
 
+    public RequisitionResponse(UUID id, String requisitionId, Integer reqNumber, String title, String shipTo, String deliverTo, LocalDate needByDate,
+                               String comments, String supplierComment, String status, LocalDateTime createdAt, UUID buyerId,
+                               String buyerEmail, String buyerName, UUID supplierId, String supplierEmail,
+                               String supplierName, List<RequisitionItemDto> items) {
+        this(id, requisitionId, reqNumber, title, shipTo, deliverTo, needByDate, comments, supplierComment, null, status, createdAt, buyerId, buyerEmail, buyerName, supplierId, supplierEmail, supplierName, items);
+    }
+
     public RequisitionResponse(UUID id, String title, String shipTo, String deliverTo, LocalDate needByDate,
                                String comments, String supplierComment, String status, LocalDateTime createdAt, UUID buyerId,
                                String buyerEmail, String buyerName, UUID supplierId, String supplierEmail,
                                String supplierName, List<RequisitionItemDto> items) {
-        this(id, null, null, title, shipTo, deliverTo, needByDate, comments, supplierComment, status, createdAt, buyerId, buyerEmail, buyerName, supplierId, supplierEmail, supplierName, items);
+        this(id, null, null, title, shipTo, deliverTo, needByDate, comments, supplierComment, null, status, createdAt, buyerId, buyerEmail, buyerName, supplierId, supplierEmail, supplierName, items);
     }
 
     public UUID getId() {
@@ -129,6 +138,14 @@ public class RequisitionResponse {
 
     public void setSupplierComment(String supplierComment) {
         this.supplierComment = supplierComment;
+    }
+
+    public String getCancellationReason() {
+        return cancellationReason;
+    }
+
+    public void setCancellationReason(String cancellationReason) {
+        this.cancellationReason = cancellationReason;
     }
 
     public String getStatus() {

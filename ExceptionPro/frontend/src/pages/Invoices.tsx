@@ -12,8 +12,18 @@ interface EligibleRequest {
   buyerName: string;
   buyerEmail: string;
   totalAmount: number;
+  currencyType?: string;
   itemCount: number;
   needByDate: string;
+}
+
+interface InvoiceItem {
+  productName: string;
+  quantity: number;
+  price: number;
+  currencyType?: string;
+  unitMeasure?: string;
+  totalPrice?: number;
 }
 
 interface InvoiceData {
@@ -27,15 +37,22 @@ interface InvoiceData {
   supplierId: string;
   supplierName: string;
   supplierEmail: string;
+  supplierAddress?: string;
   buyerId: string;
   buyerName: string;
   buyerEmail: string;
+  buyerAddress?: string;
   invoiceDate: string;
   dueDate: string;
   totalAmount: number;
+  poAmount?: number;
+  taxPercentage?: number;
+  taxAmount?: number;
+  currencyType?: string;
   notes?: string;
   status: string;
   createdAt: string;
+  items?: InvoiceItem[];
 }
 
 const InvoicesPage: React.FC = () => {
@@ -54,7 +71,11 @@ const InvoicesPage: React.FC = () => {
   const [invoiceNumber, setInvoiceNumber] = useState<string>('');
   const [invoiceDate, setInvoiceDate] = useState<string>('');
   const [dueDate, setDueDate] = useState<string>('');
-  const [totalAmount, setTotalAmount] = useState<number>(0);
+  const [poAmount, setPoAmount] = useState<number | ''>(0);
+  const [currencyType, setCurrencyType] = useState<string>('');
+  const [taxPercentage, setTaxPercentage] = useState<string>('');
+  const [taxAmount, setTaxAmount] = useState<number>(0);
+  const [totalInvoiceAmount, setTotalInvoiceAmount] = useState<number>(0);
   const [notes, setNotes] = useState<string>('');
   const [submitting, setSubmitting] = useState<boolean>(false);
 
@@ -64,7 +85,11 @@ const InvoicesPage: React.FC = () => {
   const [editInvoiceNumber, setEditInvoiceNumber] = useState<string>('');
   const [editInvoiceDate, setEditInvoiceDate] = useState<string>('');
   const [editDueDate, setEditDueDate] = useState<string>('');
-  const [editTotalAmount, setEditTotalAmount] = useState<number>(0);
+  const [editPoAmount, setEditPoAmount] = useState<number | ''>(0);
+  const [editCurrencyType, setEditCurrencyType] = useState<string>('');
+  const [editTaxPercentage, setEditTaxPercentage] = useState<string>('');
+  const [editTaxAmount, setEditTaxAmount] = useState<number>(0);
+  const [editTotalInvoiceAmount, setEditTotalInvoiceAmount] = useState<number>(0);
   const [editNotes, setEditNotes] = useState<string>('');
   const [editSubmitting, setEditSubmitting] = useState<boolean>(false);
 
@@ -97,6 +122,49 @@ const InvoicesPage: React.FC = () => {
     }
   };
 
+  const calculateTaxAmount = (base: number | '', taxPctStr: string): number => {
+    const numericBase = typeof base === 'number' ? base : parseFloat(String(base));
+    if (isNaN(numericBase) || numericBase < 0) return 0;
+    const cleanTax = (taxPctStr || '').replace(/[^0-9.]/g, '');
+    const numericTax = parseFloat(cleanTax);
+    if (isNaN(numericTax) || numericTax <= 0) {
+      return 0;
+    }
+    const calculated = (numericBase * numericTax) / 100;
+    return Number(calculated.toFixed(2));
+  };
+
+  const calculateTotalInvoiceAmount = (base: number | '', taxPctStr: string): number => {
+    const numericBase = typeof base === 'number' ? base : parseFloat(String(base));
+    if (isNaN(numericBase) || numericBase < 0) return 0;
+    const taxAmt = calculateTaxAmount(base, taxPctStr);
+    return Number((numericBase + taxAmt).toFixed(2));
+  };
+
+  const handlePoAmountChange = (val: number | '') => {
+    setPoAmount(val);
+    setTaxAmount(calculateTaxAmount(val, taxPercentage));
+    setTotalInvoiceAmount(calculateTotalInvoiceAmount(val, taxPercentage));
+  };
+
+  const handleTaxPercentageChange = (val: string) => {
+    setTaxPercentage(val);
+    setTaxAmount(calculateTaxAmount(poAmount, val));
+    setTotalInvoiceAmount(calculateTotalInvoiceAmount(poAmount, val));
+  };
+
+  const handleEditPoAmountChange = (val: number | '') => {
+    setEditPoAmount(val);
+    setEditTaxAmount(calculateTaxAmount(val, editTaxPercentage));
+    setEditTotalInvoiceAmount(calculateTotalInvoiceAmount(val, editTaxPercentage));
+  };
+
+  const handleEditTaxPercentageChange = (val: string) => {
+    setEditTaxPercentage(val);
+    setEditTaxAmount(calculateTaxAmount(editPoAmount, val));
+    setEditTotalInvoiceAmount(calculateTotalInvoiceAmount(editPoAmount, val));
+  };
+
   const generateDefaultInvoiceNumber = () => {
     const randomNum = Math.floor(1000 + Math.random() * 9000);
     return `INV-${new Date().getFullYear()}-${randomNum}`;
@@ -105,13 +173,21 @@ const InvoicesPage: React.FC = () => {
   const handleSelectRequest = (reqId: string) => {
     setSelectedRequestId(reqId);
     if (!reqId) {
-      setTotalAmount(0);
+      setPoAmount(0);
+      setCurrencyType('');
+      setTaxPercentage('');
+      setTaxAmount(0);
+      setTotalInvoiceAmount(0);
       return;
     }
 
     const req = eligibleRequests.find((r) => r.id === reqId);
     if (req) {
-      setTotalAmount(req.totalAmount || 0);
+      const baseAmt = req.totalAmount !== undefined ? req.totalAmount : 0;
+      setPoAmount(baseAmt);
+      setCurrencyType(req.currencyType || 'USD');
+      setTaxAmount(calculateTaxAmount(baseAmt, taxPercentage));
+      setTotalInvoiceAmount(calculateTotalInvoiceAmount(baseAmt, taxPercentage));
       if (!invoiceNumber) {
         setInvoiceNumber(generateDefaultInvoiceNumber());
       }
@@ -148,8 +224,12 @@ const InvoicesPage: React.FC = () => {
       setError('Due Date is required.');
       return;
     }
-    if (totalAmount < 0) {
-      setError('Total Amount cannot be negative.');
+    if (poAmount === '' || isNaN(Number(poAmount)) || Number(poAmount) < 0) {
+      setError('PO Amount is required and must be non-negative.');
+      return;
+    }
+    if (!currencyType.trim()) {
+      setError('Currency Type is required.');
       return;
     }
 
@@ -158,6 +238,10 @@ const InvoicesPage: React.FC = () => {
       setError('Selected request not found.');
       return;
     }
+
+    const numericTax = parseFloat((taxPercentage || '').replace(/[^0-9.]/g, '')) || 0;
+    const calcTaxAmt = calculateTaxAmount(poAmount, taxPercentage);
+    const finalTotal = calculateTotalInvoiceAmount(poAmount, taxPercentage);
 
     setSubmitting(true);
     try {
@@ -168,7 +252,11 @@ const InvoicesPage: React.FC = () => {
         invoiceNumber: invoiceNumber.trim(),
         invoiceDate,
         dueDate,
-        totalAmount: Number(totalAmount),
+        poAmount: Number(poAmount),
+        taxPercentage: numericTax,
+        taxAmount: calcTaxAmt,
+        totalAmount: finalTotal,
+        currencyType: currencyType.trim(),
         notes,
       };
 
@@ -180,7 +268,11 @@ const InvoicesPage: React.FC = () => {
       setInvoiceNumber('');
       setInvoiceDate('');
       setDueDate('');
-      setTotalAmount(0);
+      setPoAmount(0);
+      setCurrencyType('');
+      setTaxPercentage('');
+      setTaxAmount(0);
+      setTotalInvoiceAmount(0);
       setNotes('');
 
       fetchInvoices();
@@ -197,7 +289,16 @@ const InvoicesPage: React.FC = () => {
     setEditInvoiceNumber(inv.invoiceNumber);
     setEditInvoiceDate(inv.invoiceDate);
     setEditDueDate(inv.dueDate);
-    setEditTotalAmount(inv.totalAmount);
+    const basePo = inv.poAmount !== undefined ? inv.poAmount : inv.totalAmount;
+    const taxPct = inv.taxPercentage !== undefined && inv.taxPercentage !== null ? String(inv.taxPercentage) : '';
+    setEditPoAmount(basePo);
+    setEditCurrencyType(inv.currencyType || 'USD');
+    setEditTaxPercentage(taxPct === '0' ? '' : taxPct);
+    const calculatedTax = inv.taxAmount !== undefined && inv.taxAmount !== null
+      ? inv.taxAmount
+      : calculateTaxAmount(basePo, taxPct);
+    setEditTaxAmount(calculatedTax);
+    setEditTotalInvoiceAmount(inv.totalAmount);
     setEditNotes(inv.notes || '');
   };
 
@@ -207,13 +308,30 @@ const InvoicesPage: React.FC = () => {
     setError('');
     setSuccess('');
 
+    if (editPoAmount === '' || isNaN(Number(editPoAmount)) || Number(editPoAmount) < 0) {
+      setError('PO Amount is required and must be non-negative.');
+      return;
+    }
+    if (!editCurrencyType.trim()) {
+      setError('Currency Type is required.');
+      return;
+    }
+
+    const numericTax = parseFloat((editTaxPercentage || '').replace(/[^0-9.]/g, '')) || 0;
+    const calcTaxAmt = calculateTaxAmount(editPoAmount, editTaxPercentage);
+    const finalTotal = calculateTotalInvoiceAmount(editPoAmount, editTaxPercentage);
+
     setEditSubmitting(true);
     try {
       const payload = {
         invoiceNumber: editInvoiceNumber.trim(),
         invoiceDate: editInvoiceDate,
         dueDate: editDueDate,
-        totalAmount: Number(editTotalAmount),
+        poAmount: Number(editPoAmount),
+        taxPercentage: numericTax,
+        taxAmount: calcTaxAmt,
+        totalAmount: finalTotal,
+        currencyType: editCurrencyType.trim(),
         notes: editNotes,
       };
 
@@ -265,6 +383,11 @@ const InvoicesPage: React.FC = () => {
           .box { background: #f8fafc; border: 1px solid #e2e8f0; padding: 18px; border-radius: 8px; }
           .box h4 { margin: 0 0 10px 0; color: #334155; font-size: 14px; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 1px solid #cbd5e1; padding-bottom: 6px; }
           .box p { margin: 4px 0; font-size: 14px; }
+          .items-table { width: 100%; border-collapse: collapse; margin-top: 24px; margin-bottom: 24px; font-size: 14px; }
+          .items-table th { background: #f1f5f9; color: #334155; padding: 10px 12px; text-align: left; border-bottom: 2px solid #cbd5e1; font-weight: 600; }
+          .items-table td { padding: 10px 12px; border-bottom: 1px solid #e2e8f0; color: #1e293b; }
+          .items-table th.text-right, .items-table td.text-right { text-align: right; }
+          .items-table th.text-center, .items-table td.text-center { text-align: center; }
           .amount-card { background: #eff6ff; border: 1px solid #bfdbfe; padding: 20px; border-radius: 8px; text-align: right; margin-top: 30px; }
           .amount-val { font-size: 26px; font-weight: bold; color: #2563eb; }
           .footer { margin-top: 40px; text-align: center; font-size: 12px; color: #94a3b8; border-top: 1px solid #e2e8f0; padding-top: 16px; }
@@ -284,11 +407,13 @@ const InvoicesPage: React.FC = () => {
             <h4>Supplier Details</h4>
             <p><strong>Organization / Name:</strong> ${inv.supplierName}</p>
             <p><strong>Email:</strong> ${inv.supplierEmail}</p>
+            <p><strong>Address:</strong> ${inv.supplierAddress || 'Address not specified'}</p>
           </div>
           <div class="box">
             <h4>Buyer Details</h4>
             <p><strong>Organization / Name:</strong> ${inv.buyerName}</p>
             <p><strong>Email:</strong> ${inv.buyerEmail}</p>
+            <p><strong>Address:</strong> ${inv.buyerAddress || 'Address not specified'}</p>
           </div>
         </div>
 
@@ -306,6 +431,33 @@ const InvoicesPage: React.FC = () => {
           </div>
         </div>
 
+        <table class="items-table">
+          <thead>
+            <tr>
+              <th style="width: 40px;">#</th>
+              <th>Product Name</th>
+              <th class="text-center" style="width: 120px;">Quantity</th>
+              <th class="text-right" style="width: 140px;">Price (Each)</th>
+              <th class="text-right" style="width: 140px;">Total Price</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${(inv.items && inv.items.length > 0) ? inv.items.map((it, idx) => `
+              <tr>
+                <td>${idx + 1}</td>
+                <td><strong>${it.productName}</strong></td>
+                <td class="text-center">${it.quantity} ${it.unitMeasure ? `(${it.unitMeasure})` : ''}</td>
+                <td class="text-right">${it.currencyType || inv.currencyType || 'USD'} ${Number(it.price || 0).toFixed(2)}</td>
+                <td class="text-right"><strong>${it.currencyType || inv.currencyType || 'USD'} ${Number(it.totalPrice !== undefined ? it.totalPrice : (it.quantity * it.price)).toFixed(2)}</strong></td>
+              </tr>
+            `).join('') : `
+              <tr>
+                <td colspan="5" style="text-align: center; color: #94a3b8; padding: 16px;">No itemized products found</td>
+              </tr>
+            `}
+          </tbody>
+        </table>
+
         ${inv.notes ? `
         <div class="box" style="margin-bottom: 24px;">
           <h4>Notes & Payment Terms</h4>
@@ -314,8 +466,10 @@ const InvoicesPage: React.FC = () => {
         ` : ''}
 
         <div class="amount-card">
+          <div style="font-size: 13px; color: #475569; margin-bottom: 4px;">PO Amount: <strong>${inv.currencyType || 'USD'} ${Number(inv.poAmount !== undefined ? inv.poAmount : inv.totalAmount).toFixed(2)}</strong></div>
+          ${inv.taxPercentage ? `<div style="font-size: 13px; color: #475569; margin-bottom: 6px;">Tax (${inv.taxPercentage}%): <strong>${inv.currencyType || 'USD'} ${Number(inv.taxAmount !== undefined ? inv.taxAmount : 0).toFixed(2)}</strong></div>` : ''}
           <div style="font-size: 13px; color: #475569; font-weight: 600; text-transform: uppercase;">Total Amount Payable</div>
-          <div class="amount-val">$${Number(inv.totalAmount || 0).toFixed(2)}</div>
+          <div class="amount-val">${inv.currencyType || 'USD'} ${Number(inv.totalAmount || 0).toFixed(2)}</div>
         </div>
 
         <div class="footer">
@@ -354,7 +508,7 @@ const InvoicesPage: React.FC = () => {
       <LeftNavigation activePage="invoices" />
 
       <main style={{ flex: 1, width: '100%', maxWidth: '100%', display: 'flex', flexDirection: 'column', gap: '2rem' }}>
-        
+
         {/* SECTION 1: CREATE INVOICE (Suppliers only) */}
         {isSupplier && (
           <div className="glass-card glass-card-lg" style={{ padding: '2rem' }}>
@@ -381,7 +535,7 @@ const InvoicesPage: React.FC = () => {
                   <option value="">-- Select Accepted Request --</option>
                   {eligibleRequests.map((req) => (
                     <option key={req.id} value={req.id}>
-                      [{req.requestType === 'STANDARD' ? 'Purchase Request' : 'Collaboration Request'}] {req.code !== 'COLLAB' ? `${req.code} - ` : ''}{req.title} (Buyer: {req.buyerName}, Amount: ${req.totalAmount.toFixed(2)})
+                      [{req.requestType === 'STANDARD' ? 'Purchase Request' : 'Collaboration Request'}] {req.code !== 'COLLAB' ? `${req.code} - ` : ''}{req.title} (Buyer: {req.buyerName}, Amount: {req.currencyType || 'USD'} {req.totalAmount.toFixed(2)})
                     </option>
                   ))}
                 </select>
@@ -406,16 +560,68 @@ const InvoicesPage: React.FC = () => {
                 </div>
 
                 <div className="form-group half-width">
-                  <label className="form-label">Total Amount ($) *</label>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+                    <div>
+                      <label className="form-label">PO Amount *</label>
+                      <input
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        className="form-input"
+                        placeholder="0.00"
+                        value={poAmount}
+                        onChange={(e) => handlePoAmountChange(e.target.value === '' ? '' : Number(e.target.value))}
+                        required
+                      />
+                    </div>
+                    <div>
+                      <label className="form-label">Currency Type *</label>
+                      <input
+                        type="text"
+                        className="form-input"
+                        placeholder="e.g. USD, EUR, INR"
+                        value={currencyType}
+                        onChange={(e) => setCurrencyType(e.target.value)}
+                        required
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="form-row">
+                <div className="form-group" style={{ flex: 1, minWidth: '160px' }}>
+                  <label className="form-label">Percentage of Tax</label>
                   <input
-                    type="number"
-                    step="0.01"
-                    min="0"
+                    type="text"
+                    className="form-input"
+                    placeholder="e.g. 10 or 18"
+                    value={taxPercentage}
+                    onChange={(e) => handleTaxPercentageChange(e.target.value)}
+                  />
+                </div>
+
+                <div className="form-group" style={{ flex: 1, minWidth: '160px' }}>
+                  <label className="form-label">Tax Amount (Readonly)</label>
+                  <input
+                    type="text"
                     className="form-input"
                     placeholder="0.00"
-                    value={totalAmount}
-                    onChange={(e) => setTotalAmount(Number(e.target.value))}
-                    required
+                    value={currencyType ? `${currencyType} ${Number(taxAmount || 0).toFixed(2)}` : Number(taxAmount || 0).toFixed(2)}
+                    readOnly
+                    style={{ background: 'var(--bg-tertiary)', cursor: 'not-allowed', color: 'var(--text-primary)', fontWeight: 600 }}
+                  />
+                </div>
+
+                <div className="form-group" style={{ flex: 1, minWidth: '180px' }}>
+                  <label className="form-label">Total Invoice Amount (Readonly)</label>
+                  <input
+                    type="text"
+                    className="form-input"
+                    placeholder="0.00"
+                    value={currencyType ? `${currencyType} ${Number(totalInvoiceAmount || 0).toFixed(2)}` : Number(totalInvoiceAmount || 0).toFixed(2)}
+                    readOnly
+                    style={{ background: 'var(--bg-tertiary)', cursor: 'not-allowed', color: 'var(--accent-primary)', fontWeight: 700 }}
                   />
                 </div>
               </div>
@@ -541,7 +747,9 @@ const InvoicesPage: React.FC = () => {
 
                     <div>
                       <span style={{ color: 'var(--text-muted)', fontSize: '0.8rem', fontWeight: 500, display: 'block', marginBottom: '0.2rem' }}>Total Amount</span>
-                      <div style={{ color: 'var(--accent-primary)', fontWeight: 700, fontSize: '1rem' }}>${Number(inv.totalAmount || 0).toFixed(2)}</div>
+                      <div style={{ color: 'var(--accent-primary)', fontWeight: 700, fontSize: '1rem' }}>
+                        {inv.currencyType || 'USD'} {Number(inv.totalAmount || 0).toFixed(2)}
+                      </div>
                     </div>
 
                     <div>
@@ -683,7 +891,7 @@ const InvoicesPage: React.FC = () => {
       {/* MODAL: VIEW INVOICE DETAILS */}
       {viewingInvoice && (
         <div className="modal-backdrop" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.6)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000 }}>
-          <div className="glass-card" style={{ width: '90%', maxWidth: '650px', padding: '2rem', maxHeight: '85vh', overflowY: 'auto' }}>
+          <div className="glass-card" style={{ width: '90%', maxWidth: '750px', padding: '2rem', maxHeight: '85vh', overflowY: 'auto' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.75rem' }}>
               <div>
                 <h3 className="card-title" style={{ fontSize: '1.4rem', margin: 0 }}>Invoice Details</h3>
@@ -703,15 +911,21 @@ const InvoicesPage: React.FC = () => {
               </div>
 
               <div>
-                <span style={{ color: 'var(--text-muted)', fontSize: '0.75rem', display: 'block' }}>Buyer Name & Email</span>
+                <span style={{ color: 'var(--text-muted)', fontSize: '0.75rem', display: 'block' }}>Buyer Details</span>
                 <strong style={{ color: 'var(--text-primary)' }}>{viewingInvoice.buyerName}</strong>
                 <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{viewingInvoice.buyerEmail}</div>
+                <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginTop: '0.25rem' }}>
+                  <span style={{ fontWeight: 600 }}>Address: </span>{viewingInvoice.buyerAddress || 'Address not specified'}
+                </div>
               </div>
 
               <div>
-                <span style={{ color: 'var(--text-muted)', fontSize: '0.75rem', display: 'block' }}>Supplier Name & Email</span>
+                <span style={{ color: 'var(--text-muted)', fontSize: '0.75rem', display: 'block' }}>Supplier Details</span>
                 <strong style={{ color: 'var(--text-primary)' }}>{viewingInvoice.supplierName}</strong>
                 <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{viewingInvoice.supplierEmail}</div>
+                <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginTop: '0.25rem' }}>
+                  <span style={{ fontWeight: 600 }}>Address: </span>{viewingInvoice.supplierAddress || 'Address not specified'}
+                </div>
               </div>
 
               <div>
@@ -725,14 +939,78 @@ const InvoicesPage: React.FC = () => {
               </div>
 
               <div>
-                <span style={{ color: 'var(--text-muted)', fontSize: '0.75rem', display: 'block' }}>Total Amount</span>
-                <span style={{ color: 'var(--accent-primary)', fontWeight: 700, fontSize: '1.1rem' }}>${Number(viewingInvoice.totalAmount || 0).toFixed(2)}</span>
+                <span style={{ color: 'var(--text-muted)', fontSize: '0.75rem', display: 'block' }}>PO Amount</span>
+                <span style={{ color: 'var(--text-primary)', fontWeight: 600 }}>
+                  {viewingInvoice.currencyType || 'USD'} {Number(viewingInvoice.poAmount !== undefined ? viewingInvoice.poAmount : viewingInvoice.totalAmount).toFixed(2)}
+                </span>
+              </div>
+
+              <div>
+                <span style={{ color: 'var(--text-muted)', fontSize: '0.75rem', display: 'block' }}>Tax Amount</span>
+                <span style={{ color: 'var(--text-primary)', fontWeight: 600 }}>
+                  {viewingInvoice.taxPercentage ? `${viewingInvoice.taxPercentage}% - ` : ''}
+                  {viewingInvoice.currencyType || 'USD'} {Number(viewingInvoice.taxAmount !== undefined && viewingInvoice.taxAmount !== null ? viewingInvoice.taxAmount : (viewingInvoice.totalAmount - (viewingInvoice.poAmount || viewingInvoice.totalAmount))).toFixed(2)}
+                </span>
+              </div>
+
+              <div>
+                <span style={{ color: 'var(--text-muted)', fontSize: '0.75rem', display: 'block' }}>Total Invoice Amount</span>
+                <span style={{ color: 'var(--accent-primary)', fontWeight: 700, fontSize: '1.1rem' }}>
+                  {viewingInvoice.currencyType || 'USD'} {Number(viewingInvoice.totalAmount || 0).toFixed(2)}
+                </span>
               </div>
 
               {viewingInvoice.notes && (
                 <div style={{ gridColumn: '1 / -1' }}>
                   <span style={{ color: 'var(--text-muted)', fontSize: '0.75rem', display: 'block' }}>Notes / Payment Terms</span>
                   <span style={{ color: 'var(--text-primary)', fontStyle: 'italic' }}>"{viewingInvoice.notes}"</span>
+                </div>
+              )}
+            </div>
+
+            {/* Itemized Line Items Table */}
+            <div style={{ marginBottom: '1.5rem' }}>
+              <h4 style={{ fontSize: '1rem', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '0.75rem' }}>
+                Itemized Line Items
+              </h4>
+              {viewingInvoice.items && viewingInvoice.items.length > 0 ? (
+                <div style={{ overflowX: 'auto', border: '1px solid var(--border-color)', borderRadius: '8px' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.875rem' }}>
+                    <thead>
+                      <tr style={{ background: 'var(--bg-tertiary)', borderBottom: '1px solid var(--border-color)', textAlign: 'left' }}>
+                        <th style={{ padding: '0.65rem 0.75rem', color: 'var(--text-secondary)', fontWeight: 600, width: '40px' }}>#</th>
+                        <th style={{ padding: '0.65rem 0.75rem', color: 'var(--text-secondary)', fontWeight: 600 }}>Product Name</th>
+                        <th style={{ padding: '0.65rem 0.75rem', color: 'var(--text-secondary)', fontWeight: 600, textAlign: 'center', width: '120px' }}>Quantity</th>
+                        <th style={{ padding: '0.65rem 0.75rem', color: 'var(--text-secondary)', fontWeight: 600, textAlign: 'right', width: '130px' }}>Price (Each)</th>
+                        <th style={{ padding: '0.65rem 0.75rem', color: 'var(--text-secondary)', fontWeight: 600, textAlign: 'right', width: '130px' }}>Total Price</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {viewingInvoice.items.map((it, idx) => {
+                        const itCurr = it.currencyType || viewingInvoice.currencyType || 'USD';
+                        const itTotal = it.totalPrice !== undefined ? it.totalPrice : (it.quantity * it.price);
+                        return (
+                          <tr key={idx} style={{ borderBottom: '1px solid var(--border-color)' }}>
+                            <td style={{ padding: '0.65rem 0.75rem', color: 'var(--text-muted)' }}>{idx + 1}</td>
+                            <td style={{ padding: '0.65rem 0.75rem', fontWeight: 600, color: 'var(--text-primary)' }}>{it.productName}</td>
+                            <td style={{ padding: '0.65rem 0.75rem', textAlign: 'center' }}>
+                              {it.quantity} {it.unitMeasure ? `(${it.unitMeasure})` : ''}
+                            </td>
+                            <td style={{ padding: '0.65rem 0.75rem', textAlign: 'right' }}>
+                              {itCurr} {Number(it.price || 0).toFixed(2)}
+                            </td>
+                            <td style={{ padding: '0.65rem 0.75rem', textAlign: 'right', fontWeight: 600, color: 'var(--text-primary)' }}>
+                              {itCurr} {Number(itTotal || 0).toFixed(2)}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <div style={{ color: 'var(--text-muted)', fontSize: '0.85rem', fontStyle: 'italic', padding: '0.5rem 0' }}>
+                  No item breakdown available for this invoice.
                 </div>
               )}
             </div>
@@ -787,15 +1065,66 @@ const InvoicesPage: React.FC = () => {
                 </div>
 
                 <div className="form-group half-width">
-                  <label className="form-label">Total Amount ($) *</label>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+                    <div>
+                      <label className="form-label">PO Amount *</label>
+                      <input
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        className="form-input"
+                        value={editPoAmount}
+                        onChange={(e) => handleEditPoAmountChange(e.target.value === '' ? '' : Number(e.target.value))}
+                        required
+                      />
+                    </div>
+                    <div>
+                      <label className="form-label">Currency Type *</label>
+                      <input
+                        type="text"
+                        className="form-input"
+                        placeholder="e.g. USD, EUR, INR"
+                        value={editCurrencyType}
+                        onChange={(e) => setEditCurrencyType(e.target.value)}
+                        required
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="form-row">
+                <div className="form-group" style={{ flex: 1, minWidth: '160px' }}>
+                  <label className="form-label">Percentage of Tax</label>
                   <input
-                    type="number"
-                    step="0.01"
-                    min="0"
+                    type="text"
                     className="form-input"
-                    value={editTotalAmount}
-                    onChange={(e) => setEditTotalAmount(Number(e.target.value))}
-                    required
+                    placeholder="e.g. 10 or 18"
+                    value={editTaxPercentage}
+                    onChange={(e) => handleEditTaxPercentageChange(e.target.value)}
+                  />
+                </div>
+
+                <div className="form-group" style={{ flex: 1, minWidth: '160px' }}>
+                  <label className="form-label">Tax Amount (Readonly)</label>
+                  <input
+                    type="text"
+                    className="form-input"
+                    placeholder="0.00"
+                    value={editCurrencyType ? `${editCurrencyType} ${Number(editTaxAmount || 0).toFixed(2)}` : Number(editTaxAmount || 0).toFixed(2)}
+                    readOnly
+                    style={{ background: 'var(--bg-tertiary)', cursor: 'not-allowed', color: 'var(--text-primary)', fontWeight: 600 }}
+                  />
+                </div>
+
+                <div className="form-group" style={{ flex: 1, minWidth: '180px' }}>
+                  <label className="form-label">Total Invoice Amount (Readonly)</label>
+                  <input
+                    type="text"
+                    className="form-input"
+                    value={editCurrencyType ? `${editCurrencyType} ${Number(editTotalInvoiceAmount || 0).toFixed(2)}` : Number(editTotalInvoiceAmount || 0).toFixed(2)}
+                    readOnly
+                    style={{ background: 'var(--bg-tertiary)', cursor: 'not-allowed', color: 'var(--accent-primary)', fontWeight: 700 }}
                   />
                 </div>
               </div>

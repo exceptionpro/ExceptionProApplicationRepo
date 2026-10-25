@@ -112,6 +112,24 @@ const AppContent: React.FC = () => {
           </PrivateRoute>
         } />
 
+        <Route path="/receipts" element={
+          <PrivateRoute>
+            <PurchaseReceipts />
+          </PrivateRoute>
+        } />
+
+        <Route path="/receipt-confirmations" element={
+          <PrivateRoute>
+            <PurchaseReceipts />
+          </PrivateRoute>
+        } />
+
+        <Route path="/receipt-acknowledgements" element={
+          <PrivateRoute>
+            <PurchaseReceipts />
+          </PrivateRoute>
+        } />
+
         <Route path="/reconciliation" element={
           <PrivateRoute>
             <Reconciliation />

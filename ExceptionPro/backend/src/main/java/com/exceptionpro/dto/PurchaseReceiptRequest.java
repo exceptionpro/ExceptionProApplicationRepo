@@ -1,5 +1,6 @@
 package com.exceptionpro.dto;
 
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.UUID;
 
@@ -10,7 +11,13 @@ public class PurchaseReceiptRequest {
     private UUID purchaseOrderId;
     private UUID receivedFromSupplierId;
     private UUID invoiceId;
+    private String invoiceNumber;
+    private BigDecimal invoiceAmount;
+    private String currencyType;
     private Integer quantity;
+    private Integer poQuantity;
+    private Integer receivedQuantity;
+    private Integer pendingQuantity;
     private String receivedStatus; // "Partial Received" or "Fully Received"
 
     public String getReceiptNo() {
@@ -61,11 +68,59 @@ public class PurchaseReceiptRequest {
         this.quantity = quantity;
     }
 
+    public Integer getPoQuantity() {
+        return poQuantity;
+    }
+
+    public void setPoQuantity(Integer poQuantity) {
+        this.poQuantity = poQuantity;
+    }
+
+    public Integer getReceivedQuantity() {
+        return receivedQuantity;
+    }
+
+    public void setReceivedQuantity(Integer receivedQuantity) {
+        this.receivedQuantity = receivedQuantity;
+    }
+
+    public Integer getPendingQuantity() {
+        return pendingQuantity;
+    }
+
+    public void setPendingQuantity(Integer pendingQuantity) {
+        this.pendingQuantity = pendingQuantity;
+    }
+
     public String getReceivedStatus() {
         return receivedStatus;
     }
 
     public void setReceivedStatus(String receivedStatus) {
         this.receivedStatus = receivedStatus;
+    }
+
+    public String getInvoiceNumber() {
+        return invoiceNumber;
+    }
+
+    public void setInvoiceNumber(String invoiceNumber) {
+        this.invoiceNumber = invoiceNumber;
+    }
+
+    public BigDecimal getInvoiceAmount() {
+        return invoiceAmount;
+    }
+
+    public void setInvoiceAmount(BigDecimal invoiceAmount) {
+        this.invoiceAmount = invoiceAmount;
+    }
+
+    public String getCurrencyType() {
+        return currencyType;
+    }
+
+    public void setCurrencyType(String currencyType) {
+        this.currencyType = currencyType;
     }
 }

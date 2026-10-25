@@ -3,6 +3,8 @@ package com.exceptionpro.dto;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.UUID;
 
 public class InvoiceResponse {
@@ -17,15 +19,22 @@ public class InvoiceResponse {
     private UUID supplierId;
     private String supplierName;
     private String supplierEmail;
+    private String supplierAddress;
     private UUID buyerId;
     private String buyerName;
     private String buyerEmail;
+    private String buyerAddress;
     private LocalDate invoiceDate;
     private LocalDate dueDate;
     private BigDecimal totalAmount;
+    private BigDecimal poAmount;
+    private BigDecimal taxPercentage;
+    private BigDecimal taxAmount;
+    private String currencyType = "USD";
     private String notes;
     private String status;
     private LocalDateTime createdAt;
+    private List<InvoiceItemResponse> items = new ArrayList<>();
 
     public InvoiceResponse() {}
 
@@ -35,6 +44,54 @@ public class InvoiceResponse {
                            UUID buyerId, String buyerName, String buyerEmail,
                            LocalDate invoiceDate, LocalDate dueDate, BigDecimal totalAmount,
                            String notes, String status, LocalDateTime createdAt) {
+        this(id, invoiceNumber, requestType, requisitionId, collaborationRequisitionId, requestTitle, requestCode,
+                supplierId, supplierName, supplierEmail, buyerId, buyerName, buyerEmail,
+                invoiceDate, dueDate, totalAmount, totalAmount, BigDecimal.ZERO, BigDecimal.ZERO, "USD", notes, status, createdAt);
+    }
+
+    public InvoiceResponse(UUID id, String invoiceNumber, String requestType, UUID requisitionId,
+                           UUID collaborationRequisitionId, String requestTitle, String requestCode,
+                           UUID supplierId, String supplierName, String supplierEmail,
+                           UUID buyerId, String buyerName, String buyerEmail,
+                           LocalDate invoiceDate, LocalDate dueDate, BigDecimal totalAmount,
+                           String currencyType, String notes, String status, LocalDateTime createdAt) {
+        this(id, invoiceNumber, requestType, requisitionId, collaborationRequisitionId, requestTitle, requestCode,
+                supplierId, supplierName, supplierEmail, buyerId, buyerName, buyerEmail,
+                invoiceDate, dueDate, totalAmount, totalAmount, BigDecimal.ZERO, BigDecimal.ZERO, currencyType, notes, status, createdAt);
+    }
+
+    public InvoiceResponse(UUID id, String invoiceNumber, String requestType, UUID requisitionId,
+                           UUID collaborationRequisitionId, String requestTitle, String requestCode,
+                           UUID supplierId, String supplierName, String supplierEmail,
+                           UUID buyerId, String buyerName, String buyerEmail,
+                           LocalDate invoiceDate, LocalDate dueDate, BigDecimal totalAmount,
+                           BigDecimal poAmount, BigDecimal taxPercentage,
+                           String currencyType, String notes, String status, LocalDateTime createdAt) {
+        this(id, invoiceNumber, requestType, requisitionId, collaborationRequisitionId, requestTitle, requestCode,
+                supplierId, supplierName, supplierEmail, buyerId, buyerName, buyerEmail,
+                invoiceDate, dueDate, totalAmount, poAmount, taxPercentage, BigDecimal.ZERO, currencyType, notes, status, createdAt);
+    }
+
+    public InvoiceResponse(UUID id, String invoiceNumber, String requestType, UUID requisitionId,
+                           UUID collaborationRequisitionId, String requestTitle, String requestCode,
+                           UUID supplierId, String supplierName, String supplierEmail,
+                           UUID buyerId, String buyerName, String buyerEmail,
+                           LocalDate invoiceDate, LocalDate dueDate, BigDecimal totalAmount,
+                           BigDecimal poAmount, BigDecimal taxPercentage, BigDecimal taxAmount,
+                           String currencyType, String notes, String status, LocalDateTime createdAt) {
+        this(id, invoiceNumber, requestType, requisitionId, collaborationRequisitionId, requestTitle, requestCode,
+                supplierId, supplierName, supplierEmail, "", buyerId, buyerName, buyerEmail, "",
+                invoiceDate, dueDate, totalAmount, poAmount, taxPercentage, taxAmount, currencyType, notes, status, createdAt, new ArrayList<>());
+    }
+
+    public InvoiceResponse(UUID id, String invoiceNumber, String requestType, UUID requisitionId,
+                           UUID collaborationRequisitionId, String requestTitle, String requestCode,
+                           UUID supplierId, String supplierName, String supplierEmail, String supplierAddress,
+                           UUID buyerId, String buyerName, String buyerEmail, String buyerAddress,
+                           LocalDate invoiceDate, LocalDate dueDate, BigDecimal totalAmount,
+                           BigDecimal poAmount, BigDecimal taxPercentage, BigDecimal taxAmount,
+                           String currencyType, String notes, String status, LocalDateTime createdAt,
+                           List<InvoiceItemResponse> items) {
         this.id = id;
         this.invoiceNumber = invoiceNumber;
         this.requestType = requestType;
@@ -45,15 +102,22 @@ public class InvoiceResponse {
         this.supplierId = supplierId;
         this.supplierName = supplierName;
         this.supplierEmail = supplierEmail;
+        this.supplierAddress = supplierAddress != null ? supplierAddress : "";
         this.buyerId = buyerId;
         this.buyerName = buyerName;
         this.buyerEmail = buyerEmail;
+        this.buyerAddress = buyerAddress != null ? buyerAddress : "";
         this.invoiceDate = invoiceDate;
         this.dueDate = dueDate;
         this.totalAmount = totalAmount;
+        this.poAmount = poAmount != null ? poAmount : totalAmount;
+        this.taxPercentage = taxPercentage != null ? taxPercentage : BigDecimal.ZERO;
+        this.taxAmount = taxAmount != null ? taxAmount : BigDecimal.ZERO;
+        this.currencyType = currencyType != null && !currencyType.isBlank() ? currencyType : "USD";
         this.notes = notes;
         this.status = status;
         this.createdAt = createdAt;
+        this.items = items != null ? items : new ArrayList<>();
     }
 
     public UUID getId() {
@@ -206,5 +270,61 @@ public class InvoiceResponse {
 
     public void setCreatedAt(LocalDateTime createdAt) {
         this.createdAt = createdAt;
+    }
+
+    public String getCurrencyType() {
+        return currencyType;
+    }
+
+    public void setCurrencyType(String currencyType) {
+        this.currencyType = currencyType;
+    }
+
+    public BigDecimal getPoAmount() {
+        return poAmount;
+    }
+
+    public void setPoAmount(BigDecimal poAmount) {
+        this.poAmount = poAmount;
+    }
+
+    public BigDecimal getTaxPercentage() {
+        return taxPercentage;
+    }
+
+    public void setTaxPercentage(BigDecimal taxPercentage) {
+        this.taxPercentage = taxPercentage;
+    }
+
+    public BigDecimal getTaxAmount() {
+        return taxAmount;
+    }
+
+    public void setTaxAmount(BigDecimal taxAmount) {
+        this.taxAmount = taxAmount;
+    }
+
+    public String getSupplierAddress() {
+        return supplierAddress;
+    }
+
+    public void setSupplierAddress(String supplierAddress) {
+        this.supplierAddress = supplierAddress;
+    }
+
+    public String getBuyerAddress() {
+        return buyerAddress;
+    }
+
+    public void setBuyerAddress(String buyerAddress) {
+        this.buyerAddress = buyerAddress;
+    }
+
+    public List<InvoiceItemResponse> getItems() {
+        return items;
+    }
+
+    public void setItems(List<InvoiceItemResponse> items) {
+        this.items = items;
     }
 }
