@@ -4,7 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import api from '../services/api';
 
 interface LeftNavigationProps {
-  activePage: 'home' | 'profile' | 'partners' | 'catalogue' | 'requisition' | 'request-notification' | 'collaboration-requisition' | 'collaboration-request-notification' | 'notifications' | 'admin' | 'invoices' | 'purchase-receipts' | 'reconciliation' | 'payments';
+  activePage: 'dashboard' | 'home' | 'profile' | 'partners' | 'catalogue' | 'requisition' | 'request-notification' | 'collaboration-requisition' | 'collaboration-request-notification' | 'notifications' | 'admin' | 'invoices' | 'purchase-receipts' | 'reconciliation' | 'payments';
 }
 
 const LeftNavigation: React.FC<LeftNavigationProps> = ({ activePage }) => {
@@ -78,6 +78,22 @@ const LeftNavigation: React.FC<LeftNavigationProps> = ({ activePage }) => {
 
         {/* Sidebar Navigation Options */}
         <div className="glass-card" style={{ padding: '1rem', display: 'flex', flexDirection: 'column', gap: '0.5rem', width: '100%' }}>
+          {/* 1. Dashboard: FIRST item in Left Navigation for Suppliers and Buyers */}
+          {(isBuyer || isSupplier) && (
+            <a
+              href="/dashboard"
+              className={`sidebar-link ${activePage === 'dashboard' ? 'active' : ''}`}
+              onClick={(e) => { e.preventDefault(); navigate('/dashboard'); }}
+            >
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="3" y="3" width="7" height="9" rx="1"></rect>
+                <rect x="14" y="3" width="7" height="5" rx="1"></rect>
+                <rect x="14" y="12" width="7" height="9" rx="1"></rect>
+                <rect x="3" y="16" width="7" height="5" rx="1"></rect>
+              </svg>
+              Dashboard
+            </a>
+          )}
           {isSupplier && (
             <a
               href="/catalogue"

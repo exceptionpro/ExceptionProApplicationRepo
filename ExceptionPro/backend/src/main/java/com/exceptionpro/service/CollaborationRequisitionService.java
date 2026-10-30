@@ -38,7 +38,7 @@ import com.exceptionpro.repository.UserRepository;
 
 @Service
 @Transactional
-@SuppressWarnings({"null", "unused"})
+@SuppressWarnings("null")
 public class CollaborationRequisitionService {
 
     private final CollaborationRequisitionRepository collaborationRequisitionRepository;

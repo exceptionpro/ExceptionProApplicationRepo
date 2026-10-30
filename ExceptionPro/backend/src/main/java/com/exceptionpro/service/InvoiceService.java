@@ -78,7 +78,7 @@ public class InvoiceService {
 
             String currencyType = (r.getItems() != null && !r.getItems().isEmpty())
                     ? r.getItems().stream()
-                            .map(RequisitionItem::getCurrencyType)
+                            .map(item -> item != null ? item.getCurrencyType() : null)
                             .filter(c -> c != null && !c.isBlank())
                             .findFirst()
                             .orElse("USD")
@@ -113,7 +113,7 @@ public class InvoiceService {
 
                 String currencyType = (c.getItems() != null && !c.getItems().isEmpty())
                         ? c.getItems().stream()
-                                .map(CollaborationRequisitionItem::getCurrencyType)
+                                .map(cItem -> cItem != null ? cItem.getCurrencyType() : null)
                                 .filter(cType -> cType != null && !cType.isBlank())
                                 .findFirst()
                                 .orElse("USD")

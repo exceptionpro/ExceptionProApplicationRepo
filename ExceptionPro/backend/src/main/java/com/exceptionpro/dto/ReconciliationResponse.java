@@ -48,7 +48,16 @@ public class ReconciliationResponse {
     private BigDecimal poVsInvoiceAmtVariance;
     private String amountMatchStatus; // MATCHED, PARTIAL, MISMATCH
 
-    // 4) Result & Remarks
+    // 4) Tax: Tax Percentage <-> Calculated Tax <-> Invoice Tax
+    private BigDecimal taxPercentage;
+    private BigDecimal taxAmount;
+    private BigDecimal calculatedTaxAmount;
+    private BigDecimal taxVariance;
+    private String taxMatchStatus; // MATCHED, MISMATCH
+    private String taxMatch;       // MATCHED, MISMATCH
+    private BigDecimal invoiceBaseAmount;
+
+    // 5) Result & Remarks
     private String quantityMatch; // MATCHED, PARTIAL, MISMATCH
     private String priceMatch;    // MATCHED, MISMATCH
     private String amountMatch;   // MATCHED, PARTIAL, MISMATCH
@@ -435,5 +444,61 @@ public class ReconciliationResponse {
 
     public void setItems(List<ReconciliationItemDto> items) {
         this.items = items;
+    }
+
+    public BigDecimal getTaxPercentage() {
+        return taxPercentage;
+    }
+
+    public void setTaxPercentage(BigDecimal taxPercentage) {
+        this.taxPercentage = taxPercentage;
+    }
+
+    public BigDecimal getTaxAmount() {
+        return taxAmount;
+    }
+
+    public void setTaxAmount(BigDecimal taxAmount) {
+        this.taxAmount = taxAmount;
+    }
+
+    public BigDecimal getCalculatedTaxAmount() {
+        return calculatedTaxAmount;
+    }
+
+    public void setCalculatedTaxAmount(BigDecimal calculatedTaxAmount) {
+        this.calculatedTaxAmount = calculatedTaxAmount;
+    }
+
+    public BigDecimal getTaxVariance() {
+        return taxVariance;
+    }
+
+    public void setTaxVariance(BigDecimal taxVariance) {
+        this.taxVariance = taxVariance;
+    }
+
+    public String getTaxMatchStatus() {
+        return taxMatchStatus;
+    }
+
+    public void setTaxMatchStatus(String taxMatchStatus) {
+        this.taxMatchStatus = taxMatchStatus;
+    }
+
+    public String getTaxMatch() {
+        return taxMatch;
+    }
+
+    public void setTaxMatch(String taxMatch) {
+        this.taxMatch = taxMatch;
+    }
+
+    public BigDecimal getInvoiceBaseAmount() {
+        return invoiceBaseAmount;
+    }
+
+    public void setInvoiceBaseAmount(BigDecimal invoiceBaseAmount) {
+        this.invoiceBaseAmount = invoiceBaseAmount;
     }
 }

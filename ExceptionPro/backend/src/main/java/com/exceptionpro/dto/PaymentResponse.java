@@ -35,6 +35,7 @@ public class PaymentResponse {
     private LocalDate receiptDate;
     private Integer receivedQuantity;
     private BigDecimal receivedAmount;
+    private BigDecimal receiptAmount;
 
     // 3. Invoice Details
     private UUID invoiceId;
@@ -43,11 +44,22 @@ public class PaymentResponse {
     private Integer invoiceQuantity;
     private BigDecimal invoiceUnitPrice;
     private BigDecimal invoiceAmount;
+    private BigDecimal taxPercentage;
+    private BigDecimal taxAmount;
 
     // 4. Reconciliation
     private UUID reconciliationId;
+    private String reconciliationNumber;
     private String reconciliationStatus; // Matched, Exception, Partial
     private String exceptionReason;
+    private String quantityMatchStatus;  // MATCHED, MISMATCH, PARTIAL
+    private String priceMatchStatus;     // MATCHED, MISMATCH
+    private String amountMatchStatus;    // MATCHED, MISMATCH, PARTIAL
+    private String taxMatchStatus;       // MATCHED, MISMATCH
+    private String overallResult;        // MATCHED, EXCEPTION, PARTIAL
+    private BigDecimal invoiceBaseAmount;
+    private BigDecimal calculatedTaxAmount;
+    private BigDecimal taxVariance;
     private Integer poVsReceiptQtyVariance;
     private Integer receiptVsInvoiceQtyVariance;
     private Integer poVsInvoiceQtyVariance;
@@ -235,11 +247,25 @@ public class PaymentResponse {
     }
 
     public BigDecimal getReceivedAmount() {
-        return receivedAmount;
+        return receivedAmount != null ? receivedAmount : receiptAmount;
     }
 
     public void setReceivedAmount(BigDecimal receivedAmount) {
         this.receivedAmount = receivedAmount;
+        if (this.receiptAmount == null) {
+            this.receiptAmount = receivedAmount;
+        }
+    }
+
+    public BigDecimal getReceiptAmount() {
+        return receiptAmount != null ? receiptAmount : receivedAmount;
+    }
+
+    public void setReceiptAmount(BigDecimal receiptAmount) {
+        this.receiptAmount = receiptAmount;
+        if (this.receivedAmount == null) {
+            this.receivedAmount = receiptAmount;
+        }
     }
 
     public UUID getInvoiceId() {
@@ -290,12 +316,36 @@ public class PaymentResponse {
         this.invoiceAmount = invoiceAmount;
     }
 
+    public BigDecimal getTaxPercentage() {
+        return taxPercentage;
+    }
+
+    public void setTaxPercentage(BigDecimal taxPercentage) {
+        this.taxPercentage = taxPercentage;
+    }
+
+    public BigDecimal getTaxAmount() {
+        return taxAmount;
+    }
+
+    public void setTaxAmount(BigDecimal taxAmount) {
+        this.taxAmount = taxAmount;
+    }
+
     public UUID getReconciliationId() {
         return reconciliationId;
     }
 
     public void setReconciliationId(UUID reconciliationId) {
         this.reconciliationId = reconciliationId;
+    }
+
+    public String getReconciliationNumber() {
+        return reconciliationNumber;
+    }
+
+    public void setReconciliationNumber(String reconciliationNumber) {
+        this.reconciliationNumber = reconciliationNumber;
     }
 
     public String getReconciliationStatus() {
@@ -312,6 +362,70 @@ public class PaymentResponse {
 
     public void setExceptionReason(String exceptionReason) {
         this.exceptionReason = exceptionReason;
+    }
+
+    public String getQuantityMatchStatus() {
+        return quantityMatchStatus;
+    }
+
+    public void setQuantityMatchStatus(String quantityMatchStatus) {
+        this.quantityMatchStatus = quantityMatchStatus;
+    }
+
+    public String getPriceMatchStatus() {
+        return priceMatchStatus;
+    }
+
+    public void setPriceMatchStatus(String priceMatchStatus) {
+        this.priceMatchStatus = priceMatchStatus;
+    }
+
+    public String getAmountMatchStatus() {
+        return amountMatchStatus;
+    }
+
+    public void setAmountMatchStatus(String amountMatchStatus) {
+        this.amountMatchStatus = amountMatchStatus;
+    }
+
+    public String getTaxMatchStatus() {
+        return taxMatchStatus;
+    }
+
+    public void setTaxMatchStatus(String taxMatchStatus) {
+        this.taxMatchStatus = taxMatchStatus;
+    }
+
+    public String getOverallResult() {
+        return overallResult;
+    }
+
+    public void setOverallResult(String overallResult) {
+        this.overallResult = overallResult;
+    }
+
+    public BigDecimal getInvoiceBaseAmount() {
+        return invoiceBaseAmount;
+    }
+
+    public void setInvoiceBaseAmount(BigDecimal invoiceBaseAmount) {
+        this.invoiceBaseAmount = invoiceBaseAmount;
+    }
+
+    public BigDecimal getCalculatedTaxAmount() {
+        return calculatedTaxAmount;
+    }
+
+    public void setCalculatedTaxAmount(BigDecimal calculatedTaxAmount) {
+        this.calculatedTaxAmount = calculatedTaxAmount;
+    }
+
+    public BigDecimal getTaxVariance() {
+        return taxVariance;
+    }
+
+    public void setTaxVariance(BigDecimal taxVariance) {
+        this.taxVariance = taxVariance;
     }
 
     public Integer getPoVsReceiptQtyVariance() {

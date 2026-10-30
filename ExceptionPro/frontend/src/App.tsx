@@ -19,8 +19,14 @@ import Invoices from './pages/Invoices';
 import PurchaseReceipts from './pages/PurchaseReceipts';
 import Reconciliation from './pages/Reconciliation';
 import Payments from './pages/Payments';
+import BuyerDashboard from './pages/BuyerDashboard';
+import SupplierDashboard from './pages/SupplierDashboard';
 import Messaging from './pages/Messaging';
 import MessagingWidget from './components/MessagingWidget';
+import TermsAndConditions from './pages/TermsAndConditions';
+import PrivacyPolicy from './pages/PrivacyPolicy';
+import CodeOfConduct from './pages/CodeOfConduct';
+import Disclaimer from './pages/Disclaimer';
 
 const AppContent: React.FC = () => {
   const { user } = useAuth();
@@ -33,6 +39,12 @@ const AppContent: React.FC = () => {
         <Route path="/" element={<Navigate to={user ? (user.role === 'ROLE_ADMIN' ? "/admin" : "/feed") : "/login"} replace />} />
         <Route path="/login" element={user ? <Navigate to="/" replace /> : <Login />} />
         <Route path="/register" element={user ? <Navigate to="/feed" replace /> : <Register />} />
+
+        <Route path="/dashboard" element={
+          <PrivateRoute>
+            {user?.accountType?.toLowerCase() === 'supplier' ? <SupplierDashboard /> : <BuyerDashboard />}
+          </PrivateRoute>
+        } />
 
         <Route path="/feed" element={
           <PrivateRoute>
@@ -153,6 +165,14 @@ const AppContent: React.FC = () => {
             <AdminDashboard />
           </PrivateRoute>
         } />
+
+        {/* Legal & Policy Pages */}
+        <Route path="/terms-and-conditions" element={<TermsAndConditions />} />
+        <Route path="/terms" element={<TermsAndConditions />} />
+        <Route path="/privacy-policy" element={<PrivacyPolicy />} />
+        <Route path="/privacy" element={<PrivacyPolicy />} />
+        <Route path="/code-of-conduct" element={<CodeOfConduct />} />
+        <Route path="/disclaimer" element={<Disclaimer />} />
 
         <Route path="*" element={<Navigate to="/login" replace />} />
       </Routes>

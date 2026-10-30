@@ -1,19 +1,35 @@
 package com.exceptionpro.service;
 
-import com.exceptionpro.dto.PaymentResponse;
-import com.exceptionpro.dto.PaymentSaveRequest;
-import com.exceptionpro.dto.PaymentStatusUpdateRequest;
-import com.exceptionpro.entity.*;
-import com.exceptionpro.repository.*;
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
-
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.util.*;
+import java.util.List;
+import java.util.Objects;
+import java.util.Optional;
+import java.util.UUID;
 import java.util.stream.Collectors;
+
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import com.exceptionpro.dto.PaymentResponse;
+import com.exceptionpro.dto.PaymentSaveRequest;
+import com.exceptionpro.dto.PaymentStatusUpdateRequest;
+import com.exceptionpro.dto.ReconciliationResponse;
+import com.exceptionpro.entity.Invoice;
+import com.exceptionpro.entity.Payment;
+import com.exceptionpro.entity.PurchaseReceipt;
+import com.exceptionpro.entity.Reconciliation;
+import com.exceptionpro.entity.Requisition;
+import com.exceptionpro.entity.RequisitionItem;
+import com.exceptionpro.entity.User;
+import com.exceptionpro.repository.InvoiceRepository;
+import com.exceptionpro.repository.PaymentRepository;
+import com.exceptionpro.repository.PurchaseReceiptRepository;
+import com.exceptionpro.repository.ReconciliationRepository;
+import com.exceptionpro.repository.RequisitionRepository;
+import com.exceptionpro.repository.UserRepository;
 
 @Service
 @Transactional
@@ -26,6 +42,7 @@ public class PaymentService {
     private final ReconciliationRepository reconciliationRepository;
     private final UserRepository userRepository;
     private final NotificationService notificationService;
+    private final ReconciliationService reconciliationService;
 
     public PaymentService(PaymentRepository paymentRepository,
                           RequisitionRepository requisitionRepository,
@@ -33,7 +50,8 @@ public class PaymentService {
                           InvoiceRepository invoiceRepository,
                           ReconciliationRepository reconciliationRepository,
                           UserRepository userRepository,
-                          NotificationService notificationService) {
+                          NotificationService notificationService,
+                          ReconciliationService reconciliationService) {
         this.paymentRepository = paymentRepository;
         this.requisitionRepository = requisitionRepository;
         this.purchaseReceiptRepository = purchaseReceiptRepository;
@@ -41,6 +59,7 @@ public class PaymentService {
         this.reconciliationRepository = reconciliationRepository;
         this.userRepository = userRepository;
         this.notificationService = notificationService;
+        this.reconciliationService = reconciliationService;
     }
 
     public synchronized String generateUniquePaymentId() {
@@ -105,6 +124,34 @@ public class PaymentService {
         return savedPayments.stream().map(this::mapToResponse).collect(Collectors.toList());
     }
 
+    /**
+     * Checks if a standard Purchase Order has reconciled successfully (3-way/4-way match).
+     * The overall result must be "MATCHED".
+     */
+    public boolean isReconciledSuccessfully(Requisition req) {
+        if (req == null) {
+            return false;
+        }
+
+        // 1. Try to evaluate reconciliation result dynamically
+        try {
+            ReconciliationResponse reconResp = reconciliationService.getReconciliationForStandardRequisition(req);
+            if (reconResp != null && "MATCHED".equalsIgnoreCase(reconResp.getOverallResult())) {
+                return true;
+            }
+        } catch (Exception ignored) {}
+
+        // 2. Check saved reconciliation in database as fallback
+        Optional<Reconciliation> savedRecon = reconciliationRepository.findByRequisitionId(req.getId());
+        if (savedRecon.isPresent()) {
+            Reconciliation recon = savedRecon.get();
+            String overall = recon.getOverallResult() != null ? recon.getOverallResult() : recon.getStatus();
+            return "MATCHED".equalsIgnoreCase(overall);
+        }
+
+        return false;
+    }
+
     private void syncRealBuyerRequisitions(User buyer) {
         List<Requisition> buyerReqs = requisitionRepository.findByBuyerIdOrderByCreatedAtDesc(buyer.getId());
         if (buyerReqs.isEmpty()) {
@@ -113,6 +160,7 @@ public class PaymentService {
 
         List<PurchaseReceipt> allReceipts = purchaseReceiptRepository.findByBuyerIdOrderByCreatedAtDesc(buyer.getId());
         List<Invoice> allInvoices = invoiceRepository.findByBuyerIdOrderByCreatedAtDesc(buyer.getId());
+        List<Reconciliation> allReconciliations = reconciliationRepository.findByBuyerIdOrderByCreatedAtDesc(buyer.getId());
 
         for (Requisition req : buyerReqs) {
             int num = (req.getReqNumber() != null) ? req.getReqNumber().intValue() : 1;
@@ -125,8 +173,32 @@ public class PaymentService {
                                     p.getRequisition() != null && p.getRequisition().getId().equals(req.getId()))
                             .findFirst());
 
-            if (existingOpt.isPresent()) {
+            // Condition: The Purchase Orders which have Reconciled successfully only those Purchase Orders the Payment Id should be generated.
+            boolean reconciled = isReconciledSuccessfully(req);
+            if (!reconciled) {
+                // If an existing payment was previously created without being paid, delete it so no unauthorized Payment ID exists.
+                if (existingOpt.isPresent()) {
+                    Payment existingPayment = existingOpt.get();
+                    if (!"Paid".equalsIgnoreCase(existingPayment.getPaymentStatus())) {
+                        paymentRepository.delete(existingPayment);
+                    }
+                }
                 continue;
+            }
+
+            Payment payment;
+            if (existingOpt.isPresent()) {
+                payment = existingOpt.get();
+                if (payment.getPaymentId() == null || payment.getPaymentId().isBlank()) {
+                    payment.setPaymentId(generateUniquePaymentId());
+                }
+            } else {
+                payment = new Payment();
+                payment.setId(UUID.randomUUID());
+                payment.setPaymentId(generateUniquePaymentId());
+                payment.setPaymentDate(LocalDate.now());
+                payment.setPaymentStatus("Payment Due");
+                payment.setCreatedAt(LocalDateTime.now());
             }
 
             // Find matching receipts and invoices
@@ -138,22 +210,19 @@ public class PaymentService {
                     .filter(inv -> inv.getRequisition() != null && inv.getRequisition().getId().equals(req.getId()))
                     .collect(Collectors.toList());
 
-            Payment payment = new Payment();
-            payment.setId(UUID.randomUUID());
-            payment.setPaymentId(generateUniquePaymentId());
-            payment.setPaymentDate(LocalDate.now());
             payment.setBuyer(buyer);
+            payment.setBuyerName(getUserDisplayName(buyer));
             payment.setRequisition(req);
             payment.setPoNumber(poNumber);
 
             if (req.getSupplier() != null) {
                 payment.setSupplier(req.getSupplier());
                 payment.setSupplierName(getUserDisplayName(req.getSupplier()));
-            } else {
+            } else if (payment.getSupplierName() == null || payment.getSupplierName().isBlank()) {
                 payment.setSupplierName("ABC Technologies Pvt Ltd");
             }
 
-            // Calculate PO totals
+            // 1. Calculate PO totals (from Specific Purchase Order)
             int poQty = 0;
             BigDecimal poAmount = BigDecimal.ZERO;
             if (req.getItems() != null) {
@@ -168,65 +237,137 @@ public class PaymentService {
             payment.setPoAmount(poAmount.setScale(2, RoundingMode.HALF_UP));
             payment.setPoUnitPrice(poQty > 0 ? poAmount.divide(BigDecimal.valueOf(poQty), 2, RoundingMode.HALF_UP) : BigDecimal.ZERO);
 
-            // Purchase Receipt info
+            // 2. Purchase Receipt info (created based on selected Specific Purchase Order)
+            // Requirement 2: Receipt Amount should be "Received Quantity * PO Price"
             if (!reqReceipts.isEmpty()) {
                 PurchaseReceipt firstRc = reqReceipts.get(0);
                 payment.setPurchaseReceipt(firstRc);
                 payment.setReceiptNumber(firstRc.getReceiptNo() != null ? firstRc.getReceiptNo() : "REC-001");
                 payment.setReceiptDate(firstRc.getReceiptDate() != null ? firstRc.getReceiptDate() : LocalDate.now());
-                int recQty = reqReceipts.stream().mapToInt(r -> (r.getQuantity() != null) ? r.getQuantity().intValue() : 0).sum();
+                int recQty = reqReceipts.stream().mapToInt(r -> (r.getReceivedQuantity() != null) ? r.getReceivedQuantity().intValue() : (r.getQuantity() != null ? r.getQuantity().intValue() : 0)).sum();
                 payment.setReceivedQuantity(recQty);
                 payment.setReceivedAmount(payment.getPoUnitPrice().multiply(BigDecimal.valueOf(recQty)).setScale(2, RoundingMode.HALF_UP));
             } else {
-                payment.setReceiptNumber("REC-" + String.format("%03d", num));
-                payment.setReceiptDate(LocalDate.now());
-                payment.setReceivedQuantity(poQty);
-                payment.setReceivedAmount(poAmount);
+                if (payment.getReceiptNumber() == null || payment.getReceiptNumber().isBlank()) {
+                    payment.setReceiptNumber("REC-" + String.format("%03d", num));
+                }
+                if (payment.getReceiptDate() == null) {
+                    payment.setReceiptDate(LocalDate.now());
+                }
+                int recQty = payment.getReceivedQuantity() != null && payment.getReceivedQuantity() > 0 ? payment.getReceivedQuantity() : poQty;
+                payment.setReceivedQuantity(recQty);
+                payment.setReceivedAmount(payment.getPoUnitPrice().multiply(BigDecimal.valueOf(recQty)).setScale(2, RoundingMode.HALF_UP));
             }
 
-            // Invoice info
+            // 3. Invoice info (created on specific Purchase Order)
+            // Requirement 3: In Invoices, PO Quantity * Price provides PO Amount, for this PO Amount, Tax will be Added.
+            // (PO Amount * Percentage of Tax)/100. So Invoice quantity should be same as PO Quantity!
             if (!reqInvoices.isEmpty()) {
                 Invoice firstInv = reqInvoices.get(0);
                 payment.setInvoice(firstInv);
                 payment.setInvoiceNumber(firstInv.getInvoiceNumber());
                 payment.setInvoiceDate(firstInv.getInvoiceDate());
                 payment.setInvoiceAmount(firstInv.getTotalAmount());
-                int invQty = payment.getPoUnitPrice().compareTo(BigDecimal.ZERO) > 0
-                        ? firstInv.getTotalAmount().divide(payment.getPoUnitPrice(), 0, RoundingMode.HALF_UP).intValue()
-                        : poQty;
-                payment.setInvoiceQuantity(invQty);
-                payment.setInvoiceUnitPrice(invQty > 0 ? firstInv.getTotalAmount().divide(BigDecimal.valueOf(invQty), 2, RoundingMode.HALF_UP) : payment.getPoUnitPrice());
-            } else {
-                payment.setInvoiceNumber("INV-2026-" + String.format("%04d", num + 100));
-                payment.setInvoiceDate(LocalDate.now());
                 payment.setInvoiceQuantity(poQty);
                 payment.setInvoiceUnitPrice(payment.getPoUnitPrice());
-                payment.setInvoiceAmount(poAmount);
+            } else {
+                if (payment.getInvoiceNumber() == null || payment.getInvoiceNumber().isBlank()) {
+                    payment.setInvoiceNumber("INV-2026-" + String.format("%04d", num + 100));
+                }
+                if (payment.getInvoiceDate() == null) {
+                    payment.setInvoiceDate(LocalDate.now());
+                }
+                payment.setInvoiceQuantity(poQty);
+                payment.setInvoiceUnitPrice(payment.getPoUnitPrice());
+                if (payment.getInvoiceAmount() == null || payment.getInvoiceAmount().compareTo(BigDecimal.ZERO) == 0) {
+                    payment.setInvoiceAmount(poAmount);
+                }
             }
 
-            // 3-Way Match evaluation
-            boolean qtyMatch = payment.getPoQuantity().equals(payment.getReceivedQuantity()) && payment.getReceivedQuantity().equals(payment.getInvoiceQuantity());
-            boolean priceMatch = payment.getPoUnitPrice().compareTo(payment.getInvoiceUnitPrice()) == 0;
-            boolean amtMatch = payment.getPoAmount().compareTo(payment.getReceivedAmount()) == 0 && payment.getReceivedAmount().compareTo(payment.getInvoiceAmount()) == 0;
+            // 4. Reconciliation (3-Way Match)
+            // Requirement 4: It should be populated from the Reconciliation.
+            // Expected Result: If Reconciliation has matched for Quantity Reconciliation, Price Reconciliation,
+            // Amount Reconciliation, Tax Reconciliation then the same should be matched in Payments -> RECONCILIATION (3-WAY MATCH).
+            ReconciliationResponse reconResp = null;
+            try {
+                reconResp = reconciliationService.getReconciliationForStandardRequisition(req);
+            } catch (Exception e) {
+                // ignore
+            }
 
-            if (qtyMatch && priceMatch && amtMatch) {
-                payment.setReconciliationStatus("Matched");
-                payment.setPaymentStatus("Payment Due");
-            } else {
-                payment.setReconciliationStatus("Exception");
-                if (!qtyMatch) {
-                    payment.setExceptionReason("Invoice quantity (" + payment.getInvoiceQuantity() + ") does not match received quantity (" + payment.getReceivedQuantity() + ").");
-                } else if (!priceMatch) {
-                    payment.setExceptionReason("Invoice unit price differs from Purchase Order unit price.");
-                } else {
-                    payment.setExceptionReason("Amount variance detected between Purchase Order, Receipt, and Invoice.");
+            if (reconResp != null) {
+                if (reconResp.getId() != null) {
+                    reconciliationRepository.findById(Objects.requireNonNull(reconResp.getId())).ifPresent(payment::setReconciliation);
                 }
-                payment.setPaymentStatus("On Hold");
+                String rStatus = reconResp.getOverallResult() != null ? reconResp.getOverallResult() : "MATCHED";
+                if ("MATCHED".equalsIgnoreCase(rStatus)) {
+                    payment.setReconciliationStatus("Matched");
+                    payment.setExceptionReason(null);
+                } else {
+                    payment.setReconciliationStatus("Exception");
+                    payment.setExceptionReason(reconResp.getRemarks() != null && !reconResp.getRemarks().isBlank()
+                            ? reconResp.getRemarks()
+                            : "Variance detected during 3-way reconciliation match.");
+                }
+            } else {
+                Optional<Reconciliation> matchedRecon = allReconciliations.stream()
+                        .filter(rc -> (rc.getRequisition() != null && rc.getRequisition().getId().equals(req.getId())) ||
+                                (rc.getPoNumber() != null && rc.getPoNumber().equalsIgnoreCase(poNumber)))
+                        .findFirst();
+
+                if (matchedRecon.isPresent()) {
+                    Reconciliation recon = matchedRecon.get();
+                    payment.setReconciliation(recon);
+                    String rStatus = recon.getOverallResult() != null ? recon.getOverallResult() : recon.getStatus();
+                    if ("MATCHED".equalsIgnoreCase(rStatus)) {
+                        payment.setReconciliationStatus("Matched");
+                        payment.setExceptionReason(null);
+                    } else if ("EXCEPTION".equalsIgnoreCase(rStatus)) {
+                        payment.setReconciliationStatus("Exception");
+                    } else {
+                        payment.setReconciliationStatus(rStatus);
+                    }
+                    if (recon.getRemarks() != null && !recon.getRemarks().isBlank()) {
+                        payment.setExceptionReason(recon.getRemarks());
+                    } else if ("Exception".equalsIgnoreCase(payment.getReconciliationStatus())) {
+                        payment.setExceptionReason("Variance detected during 3-way reconciliation match.");
+                    } else {
+                        payment.setExceptionReason(null);
+                    }
+                } else {
+                    // 3-Way Match evaluation fallback
+                    boolean qtyMatch = payment.getPoQuantity().equals(payment.getReceivedQuantity()) && payment.getReceivedQuantity().equals(payment.getInvoiceQuantity());
+                    boolean priceMatch = payment.getPoUnitPrice().compareTo(payment.getInvoiceUnitPrice()) == 0;
+                    boolean amtMatch = payment.getPoAmount().compareTo(payment.getReceivedAmount()) == 0;
+
+                    if (qtyMatch && priceMatch && amtMatch) {
+                        payment.setReconciliationStatus("Matched");
+                        payment.setExceptionReason(null);
+                    } else {
+                        payment.setReconciliationStatus("Exception");
+                        if (!qtyMatch) {
+                            payment.setExceptionReason("Invoice quantity (" + payment.getInvoiceQuantity() + ") does not match received quantity (" + payment.getReceivedQuantity() + ").");
+                        } else if (!priceMatch) {
+                            payment.setExceptionReason("Invoice unit price differs from Purchase Order unit price.");
+                        } else {
+                            payment.setExceptionReason("Amount variance detected between Purchase Order, Receipt, and Invoice.");
+                        }
+                    }
+                }
+            }
+
+            // Update payment status (preserve "Paid" if already paid)
+            if (!"Paid".equalsIgnoreCase(payment.getPaymentStatus())) {
+                if ("Exception".equalsIgnoreCase(payment.getReconciliationStatus())) {
+                    payment.setPaymentStatus("On Hold");
+                } else {
+                    payment.setPaymentStatus("Payment Due");
+                }
             }
 
             payment.setAmountToPay(payment.getInvoiceAmount());
             payment.setCurrency("INR");
-            payment.setCreatedAt(LocalDateTime.now());
+            payment.setUpdatedAt(LocalDateTime.now());
             paymentRepository.save(payment);
         }
     }
@@ -312,11 +453,9 @@ public class PaymentService {
                 payment.setInvoiceNumber(firstInv.getInvoiceNumber());
                 payment.setInvoiceDate(firstInv.getInvoiceDate());
                 payment.setInvoiceAmount(firstInv.getTotalAmount());
-                int invQty = payment.getPoUnitPrice().compareTo(BigDecimal.ZERO) > 0
-                        ? firstInv.getTotalAmount().divide(payment.getPoUnitPrice(), 0, RoundingMode.HALF_UP).intValue()
-                        : poQty;
-                payment.setInvoiceQuantity(invQty);
-                payment.setInvoiceUnitPrice(invQty > 0 ? firstInv.getTotalAmount().divide(BigDecimal.valueOf(invQty), 2, RoundingMode.HALF_UP) : payment.getPoUnitPrice());
+                // Requirement 3: Invoice quantity should be same as PO Quantity
+                payment.setInvoiceQuantity(poQty);
+                payment.setInvoiceUnitPrice(payment.getPoUnitPrice());
             } else {
                 payment.setInvoiceNumber("INV-2026-" + String.format("%04d", num + 100));
                 payment.setInvoiceDate(LocalDate.now());
@@ -325,17 +464,36 @@ public class PaymentService {
                 payment.setInvoiceAmount(poAmount);
             }
 
-            boolean qtyMatch = payment.getPoQuantity().equals(payment.getReceivedQuantity()) && payment.getReceivedQuantity().equals(payment.getInvoiceQuantity());
-            boolean priceMatch = payment.getPoUnitPrice().compareTo(payment.getInvoiceUnitPrice()) == 0;
-            boolean amtMatch = payment.getPoAmount().compareTo(payment.getReceivedAmount()) == 0 && payment.getReceivedAmount().compareTo(payment.getInvoiceAmount()) == 0;
+            ReconciliationResponse suppReconResp = null;
+            try {
+                suppReconResp = reconciliationService.getReconciliationForStandardRequisition(req);
+            } catch (Exception e) {
+                // ignore
+            }
 
-            if (qtyMatch && priceMatch && amtMatch) {
-                payment.setReconciliationStatus("Matched");
-                payment.setPaymentStatus("Payment Due");
+            if (suppReconResp != null) {
+                String rStatus = suppReconResp.getOverallResult() != null ? suppReconResp.getOverallResult() : "MATCHED";
+                if ("MATCHED".equalsIgnoreCase(rStatus)) {
+                    payment.setReconciliationStatus("Matched");
+                    payment.setPaymentStatus("Payment Due");
+                } else {
+                    payment.setReconciliationStatus("Exception");
+                    payment.setExceptionReason(suppReconResp.getRemarks() != null && !suppReconResp.getRemarks().isBlank() ? suppReconResp.getRemarks() : "Variance detected during reconciliation match.");
+                    payment.setPaymentStatus("On Hold");
+                }
             } else {
-                payment.setReconciliationStatus("Exception");
-                payment.setExceptionReason("Variance detected in quantities or amounts.");
-                payment.setPaymentStatus("On Hold");
+                boolean qtyMatch = payment.getPoQuantity().equals(payment.getReceivedQuantity()) && payment.getReceivedQuantity().equals(payment.getInvoiceQuantity());
+                boolean priceMatch = payment.getPoUnitPrice().compareTo(payment.getInvoiceUnitPrice()) == 0;
+                boolean amtMatch = payment.getPoAmount().compareTo(payment.getReceivedAmount()) == 0 && payment.getReceivedAmount().compareTo(payment.getInvoiceAmount()) == 0;
+
+                if (qtyMatch && priceMatch && amtMatch) {
+                    payment.setReconciliationStatus("Matched");
+                    payment.setPaymentStatus("Payment Due");
+                } else {
+                    payment.setReconciliationStatus("Exception");
+                    payment.setExceptionReason("Variance detected in quantities or amounts.");
+                    payment.setPaymentStatus("On Hold");
+                }
             }
 
             payment.setAmountToPay(payment.getInvoiceAmount());
@@ -676,39 +834,7 @@ public class PaymentService {
         p1.setCreatedAt(LocalDateTime.now().minusHours(5));
         paymentRepository.save(p1);
 
-        // Record 2: Exception Case (Invoice quantity exceeds received quantity)
-        Payment p2 = new Payment();
-        p2.setId(UUID.randomUUID());
-        p2.setPaymentId(generateUniquePaymentId());
-        p2.setPaymentDate(LocalDate.now());
-        p2.setBuyer(buyer);
-        p2.setSupplier(supplier);
-        p2.setSupplierName(supplier != null ? getUserDisplayName(supplier) : "ABC Technologies Pvt Ltd");
-        p2.setPoNumber("PO-2026-00126");
-        p2.setPoQuantity(100);
-        p2.setPoUnitPrice(new BigDecimal("1250.00"));
-        p2.setPoAmount(new BigDecimal("125000.00"));
-
-        p2.setReceiptNumber("REC-004");
-        p2.setReceiptDate(LocalDate.now().minusDays(4));
-        p2.setReceivedQuantity(80);
-        p2.setReceivedAmount(new BigDecimal("100000.00"));
-
-        p2.setInvoiceNumber("INV-2026-00457");
-        p2.setInvoiceDate(LocalDate.now().minusDays(1));
-        p2.setInvoiceQuantity(100);
-        p2.setInvoiceUnitPrice(new BigDecimal("1250.00"));
-        p2.setInvoiceAmount(new BigDecimal("125000.00"));
-
-        p2.setAmountToPay(new BigDecimal("125000.00"));
-        p2.setReconciliationStatus("Exception");
-        p2.setExceptionReason("Invoice quantity exceeds received quantity.");
-        p2.setPaymentStatus("On Hold");
-        p2.setCurrency("INR");
-        p2.setCreatedAt(LocalDateTime.now().minusHours(3));
-        paymentRepository.save(p2);
-
-        // Record 3: Paid Case
+        // Record 2: Paid Case (Successfully Reconciled)
         Payment p3 = new Payment();
         p3.setId(UUID.randomUUID());
         p3.setPaymentId(generateUniquePaymentId());
@@ -781,9 +907,12 @@ public class PaymentService {
         r.setReceiptDate(p.getReceiptDate());
         r.setReceivedQuantity(p.getReceivedQuantity() != null ? p.getReceivedQuantity() : Integer.valueOf(0));
         r.setReceivedAmount(p.getReceivedAmount() != null ? p.getReceivedAmount() : BigDecimal.ZERO);
+        r.setReceiptAmount(r.getReceivedAmount());
 
         if (p.getInvoice() != null) {
             r.setInvoiceId(p.getInvoice().getId());
+            r.setTaxPercentage(p.getInvoice().getTaxPercentage());
+            r.setTaxAmount(p.getInvoice().getTaxAmount());
         }
         r.setInvoiceNumber(p.getInvoiceNumber());
         r.setInvoiceDate(p.getInvoiceDate());
@@ -793,24 +922,125 @@ public class PaymentService {
 
         if (p.getReconciliation() != null) {
             r.setReconciliationId(p.getReconciliation().getId());
+            r.setReconciliationNumber(p.getReconciliation().getReconciliationNumber());
         }
         r.setReconciliationStatus(p.getReconciliationStatus() != null ? p.getReconciliationStatus() : "Matched");
         r.setExceptionReason(p.getExceptionReason());
 
-        int poQ = r.getPoQuantity() != null ? r.getPoQuantity().intValue() : 0;
-        int recQ = r.getReceivedQuantity() != null ? r.getReceivedQuantity().intValue() : 0;
-        int invQ = r.getInvoiceQuantity() != null ? r.getInvoiceQuantity().intValue() : 0;
-        r.setPoVsReceiptQtyVariance(recQ - poQ);
-        r.setReceiptVsInvoiceQtyVariance(invQ - recQ);
-        r.setPoVsInvoiceQtyVariance(invQ - poQ);
+        // Populate 4-way reconciliation details (Quantity, Price, Amount, Tax) from Reconciliation functionality
+        ReconciliationResponse reconResp = null;
+        if (p.getRequisition() != null) {
+            try {
+                reconResp = reconciliationService.getReconciliationForStandardRequisition(p.getRequisition());
+            } catch (Exception e) {
+                // ignore
+            }
+        }
 
-        BigDecimal poPrice = r.getPoUnitPrice();
-        BigDecimal invPrice = r.getInvoiceUnitPrice();
-        r.setPriceVariance(invPrice.subtract(poPrice).setScale(2, RoundingMode.HALF_UP));
+        if (reconResp != null) {
+            r.setQuantityMatchStatus(reconResp.getQuantityMatchStatus());
+            r.setPriceMatchStatus(reconResp.getPriceMatchStatus());
+            r.setAmountMatchStatus(reconResp.getAmountMatchStatus());
+            r.setTaxMatchStatus(reconResp.getTaxMatchStatus());
+            r.setOverallResult(reconResp.getOverallResult());
+            r.setInvoiceBaseAmount(reconResp.getInvoiceBaseAmount() != null ? reconResp.getInvoiceBaseAmount() : r.getPoAmount());
+            r.setCalculatedTaxAmount(reconResp.getCalculatedTaxAmount());
+            r.setTaxVariance(reconResp.getTaxVariance());
+            if (reconResp.getTaxPercentage() != null) {
+                r.setTaxPercentage(reconResp.getTaxPercentage());
+            }
+            if (reconResp.getTaxAmount() != null) {
+                r.setTaxAmount(reconResp.getTaxAmount());
+            }
+            if (reconResp.getReconciliationNumber() != null) {
+                r.setReconciliationNumber(reconResp.getReconciliationNumber());
+            }
+            if (reconResp.getId() != null && r.getReconciliationId() == null) {
+                r.setReconciliationId(reconResp.getId());
+            }
+            if (reconResp.getPoVsReceiptQtyVariance() != null) {
+                r.setPoVsReceiptQtyVariance(reconResp.getPoVsReceiptQtyVariance());
+            }
+            if (reconResp.getReceiptVsInvoiceQtyVariance() != null) {
+                r.setReceiptVsInvoiceQtyVariance(reconResp.getReceiptVsInvoiceQtyVariance());
+            }
+            if (reconResp.getPoVsInvoiceQtyVariance() != null) {
+                r.setPoVsInvoiceQtyVariance(reconResp.getPoVsInvoiceQtyVariance());
+            }
+            if (reconResp.getPriceVariance() != null) {
+                r.setPriceVariance(reconResp.getPriceVariance());
+            }
+            if (reconResp.getPoVsInvoiceAmtVariance() != null) {
+                r.setAmountVariance(reconResp.getPoVsInvoiceAmtVariance());
+            }
+        } else if (p.getReconciliation() != null) {
+            Reconciliation rec = p.getReconciliation();
+            r.setQuantityMatchStatus(rec.getQuantityMatchStatus() != null ? rec.getQuantityMatchStatus() : "MATCHED");
+            r.setPriceMatchStatus(rec.getPriceMatchStatus() != null ? rec.getPriceMatchStatus() : "MATCHED");
+            r.setAmountMatchStatus(rec.getAmountMatchStatus() != null ? rec.getAmountMatchStatus() : "MATCHED");
+            r.setTaxMatchStatus(rec.getTaxMatchStatus() != null ? rec.getTaxMatchStatus() : "MATCHED");
+            r.setOverallResult(rec.getOverallResult() != null ? rec.getOverallResult() : "MATCHED");
+            r.setInvoiceBaseAmount(rec.getPoAmount() != null ? rec.getPoAmount() : r.getPoAmount());
+            r.setCalculatedTaxAmount(rec.getCalculatedTaxAmount());
+            r.setTaxVariance(rec.getTaxVariance());
+            if (rec.getTaxPercentage() != null) {
+                r.setTaxPercentage(rec.getTaxPercentage());
+            }
+            if (rec.getTaxAmount() != null) {
+                r.setTaxAmount(rec.getTaxAmount());
+            }
+        } else {
+            // Fallback for sample/mock payments
+            int poQ = r.getPoQuantity() != null ? r.getPoQuantity().intValue() : 0;
+            int recQ = r.getReceivedQuantity() != null ? r.getReceivedQuantity().intValue() : 0;
+            int invQ = r.getInvoiceQuantity() != null ? r.getInvoiceQuantity().intValue() : 0;
+            boolean qtyOk = (poQ == recQ && recQ == invQ);
+            boolean priceOk = (r.getPoUnitPrice().compareTo(r.getInvoiceUnitPrice()) == 0);
+            boolean amtOk = (r.getPoAmount().compareTo(r.getReceivedAmount()) == 0);
 
-        BigDecimal poAmt = r.getPoAmount();
-        BigDecimal invAmt = r.getInvoiceAmount();
-        r.setAmountVariance(invAmt.subtract(poAmt).setScale(2, RoundingMode.HALF_UP));
+            boolean isMatchedRecord = "Matched".equalsIgnoreCase(p.getReconciliationStatus()) || "Paid".equalsIgnoreCase(p.getPaymentStatus());
+            r.setQuantityMatchStatus(isMatchedRecord || qtyOk ? "MATCHED" : "MISMATCH");
+            r.setPriceMatchStatus(isMatchedRecord || priceOk ? "MATCHED" : "MISMATCH");
+            r.setAmountMatchStatus(isMatchedRecord || amtOk ? "MATCHED" : "MISMATCH");
+            r.setTaxMatchStatus("MATCHED");
+            r.setOverallResult((r.getQuantityMatchStatus().equals("MATCHED") &&
+                                r.getPriceMatchStatus().equals("MATCHED") &&
+                                r.getAmountMatchStatus().equals("MATCHED") &&
+                                r.getTaxMatchStatus().equals("MATCHED")) ? "MATCHED" : "EXCEPTION");
+            r.setInvoiceBaseAmount(r.getPoAmount());
+            BigDecimal taxRate = r.getTaxPercentage() != null ? r.getTaxPercentage() : new BigDecimal("18.00");
+            r.setTaxPercentage(taxRate);
+            BigDecimal calcTax = r.getPoAmount().multiply(taxRate).divide(new BigDecimal("100"), 2, RoundingMode.HALF_UP);
+            r.setCalculatedTaxAmount(calcTax);
+            r.setTaxVariance(BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP));
+            if (r.getTaxAmount() == null) {
+                r.setTaxAmount(calcTax);
+            }
+            if (r.getReconciliationNumber() == null) {
+                r.setReconciliationNumber("REC-" + (r.getPoNumber() != null ? r.getPoNumber().replace("PO-", "").replace("PO", "") : "001"));
+            }
+        }
+
+        if (r.getPoVsReceiptQtyVariance() == null) {
+            int poQ = r.getPoQuantity() != null ? r.getPoQuantity().intValue() : 0;
+            int recQ = r.getReceivedQuantity() != null ? r.getReceivedQuantity().intValue() : 0;
+            int invQ = r.getInvoiceQuantity() != null ? r.getInvoiceQuantity().intValue() : 0;
+            r.setPoVsReceiptQtyVariance(recQ - poQ);
+            r.setReceiptVsInvoiceQtyVariance(invQ - recQ);
+            r.setPoVsInvoiceQtyVariance(invQ - poQ);
+        }
+
+        if (r.getPriceVariance() == null) {
+            BigDecimal poPrice = r.getPoUnitPrice();
+            BigDecimal invPrice = r.getInvoiceUnitPrice();
+            r.setPriceVariance(invPrice.subtract(poPrice).setScale(2, RoundingMode.HALF_UP));
+        }
+
+        if (r.getAmountVariance() == null) {
+            BigDecimal poAmt = r.getPoAmount();
+            BigDecimal baseInvAmt = r.getInvoiceBaseAmount() != null ? r.getInvoiceBaseAmount() : r.getInvoiceAmount();
+            r.setAmountVariance(baseInvAmt.subtract(poAmt).setScale(2, RoundingMode.HALF_UP));
+        }
 
         r.setAmountToPay(p.getAmountToPay() != null ? p.getAmountToPay() : r.getInvoiceAmount());
         r.setPaymentMethod(p.getPaymentMethod());

@@ -1,10 +1,17 @@
 package com.exceptionpro.entity;
 
-import jakarta.persistence.*;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.UUID;
+
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.FetchType;
+import jakarta.persistence.Id;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.ManyToOne;
+import jakarta.persistence.Table;
 
 @Entity
 @Table(name = "reconciliations")
@@ -106,7 +113,26 @@ public class Reconciliation {
     @Column(name = "amount_match_status", length = 50)
     private String amountMatchStatus = "PARTIAL";
 
-    // 4. Result & Remarks
+    // 4. Tax Reconciliation
+    @Column(name = "tax_percentage", precision = 10, scale = 2)
+    private BigDecimal taxPercentage = BigDecimal.ZERO;
+
+    @Column(name = "tax_amount", precision = 14, scale = 2)
+    private BigDecimal taxAmount = BigDecimal.ZERO;
+
+    @Column(name = "calculated_tax_amount", precision = 14, scale = 2)
+    private BigDecimal calculatedTaxAmount = BigDecimal.ZERO;
+
+    @Column(name = "tax_variance", precision = 14, scale = 2)
+    private BigDecimal taxVariance = BigDecimal.ZERO;
+
+    @Column(name = "tax_match_status", length = 50)
+    private String taxMatchStatus = "MATCHED";
+
+    @Column(name = "invoice_base_amount", precision = 14, scale = 2)
+    private BigDecimal invoiceBaseAmount = BigDecimal.ZERO;
+
+    // 5. Result & Remarks
     @Column(name = "overall_result", length = 50)
     private String overallResult = "EXCEPTION";
 
@@ -359,6 +385,54 @@ public class Reconciliation {
         this.amountMatchStatus = amountMatchStatus;
     }
 
+    public BigDecimal getTaxPercentage() {
+        return taxPercentage;
+    }
+
+    public void setTaxPercentage(BigDecimal taxPercentage) {
+        this.taxPercentage = taxPercentage;
+    }
+
+    public BigDecimal getTaxAmount() {
+        return taxAmount;
+    }
+
+    public void setTaxAmount(BigDecimal taxAmount) {
+        this.taxAmount = taxAmount;
+    }
+
+    public BigDecimal getCalculatedTaxAmount() {
+        return calculatedTaxAmount;
+    }
+
+    public void setCalculatedTaxAmount(BigDecimal calculatedTaxAmount) {
+        this.calculatedTaxAmount = calculatedTaxAmount;
+    }
+
+    public BigDecimal getTaxVariance() {
+        return taxVariance;
+    }
+
+    public void setTaxVariance(BigDecimal taxVariance) {
+        this.taxVariance = taxVariance;
+    }
+
+    public String getTaxMatchStatus() {
+        return taxMatchStatus;
+    }
+
+    public void setTaxMatchStatus(String taxMatchStatus) {
+        this.taxMatchStatus = taxMatchStatus;
+    }
+
+    public BigDecimal getInvoiceBaseAmount() {
+        return invoiceBaseAmount;
+    }
+
+    public void setInvoiceBaseAmount(BigDecimal invoiceBaseAmount) {
+        this.invoiceBaseAmount = invoiceBaseAmount;
+    }
+
     public String getOverallResult() {
         return overallResult;
     }
@@ -389,5 +463,21 @@ public class Reconciliation {
 
     public void setUpdatedAt(LocalDateTime updatedAt) {
         this.updatedAt = updatedAt;
+    }
+
+    public String getQuantityMatch() {
+        return quantityMatchStatus;
+    }
+
+    public String getPriceMatch() {
+        return priceMatchStatus;
+    }
+
+    public String getAmountMatch() {
+        return amountMatchStatus;
+    }
+
+    public String getTaxMatch() {
+        return taxMatchStatus;
     }
 }

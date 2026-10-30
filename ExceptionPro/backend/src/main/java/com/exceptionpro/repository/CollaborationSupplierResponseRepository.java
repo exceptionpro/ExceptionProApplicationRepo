@@ -13,4 +13,5 @@ public interface CollaborationSupplierResponseRepository extends JpaRepository<C
     List<CollaborationSupplierResponse> findByCollaborationRequisitionId(UUID collaborationRequisitionId);
     List<CollaborationSupplierResponse> findByCollaborationRequisitionIdAndStatus(UUID collaborationRequisitionId, String status);
     Optional<CollaborationSupplierResponse> findByCollaborationRequisitionIdAndSupplierId(UUID collaborationRequisitionId, UUID supplierId);
+    List<CollaborationSupplierResponse> findBySupplierIdOrderByCreatedAtDesc(UUID supplierId);
 }

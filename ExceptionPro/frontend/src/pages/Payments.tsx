@@ -32,6 +32,7 @@ interface PaymentRecord {
   receiptDate: string;
   receivedQuantity: number;
   receivedAmount: number;
+  receiptAmount?: number;
 
   // 3. Invoice
   invoiceId?: string;
@@ -40,9 +41,12 @@ interface PaymentRecord {
   invoiceQuantity: number;
   invoiceUnitPrice: number;
   invoiceAmount: number;
+  taxPercentage?: number;
+  taxAmount?: number;
 
   // 4. Reconciliation
   reconciliationId?: string;
+  reconciliationNumber?: string;
   reconciliationStatus: string;
   exceptionReason?: string;
   poVsReceiptQtyVariance?: number;
@@ -50,6 +54,16 @@ interface PaymentRecord {
   poVsInvoiceQtyVariance?: number;
   priceVariance?: number;
   amountVariance?: number;
+
+  // 4-Way Reconciliation Match Details from Reconciliation functionality
+  quantityMatchStatus?: string;
+  priceMatchStatus?: string;
+  amountMatchStatus?: string;
+  taxMatchStatus?: string;
+  overallResult?: string;
+  invoiceBaseAmount?: number;
+  calculatedTaxAmount?: number;
+  taxVariance?: number;
 
   // 5. Payment Amount
   amountToPay: number;
@@ -78,13 +92,24 @@ const DEFAULT_SUPPLIER_PAYMENTS: PaymentRecord[] = [
     receiptDate: '2026-09-21',
     receivedQuantity: 100,
     receivedAmount: 125000,
+    receiptAmount: 125000,
     invoiceNumber: 'INV-00456',
     invoiceDate: '2026-09-22',
     invoiceQuantity: 100,
     invoiceUnitPrice: 1250,
     invoiceAmount: 125000,
     amountToPay: 125000,
-    reconciliationStatus: 'Matched'
+    reconciliationStatus: 'Matched',
+    quantityMatchStatus: 'MATCHED',
+    priceMatchStatus: 'MATCHED',
+    amountMatchStatus: 'MATCHED',
+    taxMatchStatus: 'MATCHED',
+    overallResult: 'MATCHED',
+    invoiceBaseAmount: 125000,
+    taxPercentage: 18,
+    calculatedTaxAmount: 22500,
+    taxAmount: 22500,
+    taxVariance: 0
   },
   {
     id: 'pay-000002-default',
@@ -102,13 +127,24 @@ const DEFAULT_SUPPLIER_PAYMENTS: PaymentRecord[] = [
     receiptDate: '2026-09-22',
     receivedQuantity: 85,
     receivedAmount: 85000,
+    receiptAmount: 85000,
     invoiceNumber: 'INV-00478',
     invoiceDate: '2026-09-23',
     invoiceQuantity: 85,
     invoiceUnitPrice: 1000,
     invoiceAmount: 85000,
     amountToPay: 85000,
-    reconciliationStatus: 'Matched'
+    reconciliationStatus: 'Matched',
+    quantityMatchStatus: 'MATCHED',
+    priceMatchStatus: 'MATCHED',
+    amountMatchStatus: 'MATCHED',
+    taxMatchStatus: 'MATCHED',
+    overallResult: 'MATCHED',
+    invoiceBaseAmount: 85000,
+    taxPercentage: 18,
+    calculatedTaxAmount: 15300,
+    taxAmount: 15300,
+    taxVariance: 0
   },
   {
     id: 'pay-000003-default',
@@ -126,6 +162,7 @@ const DEFAULT_SUPPLIER_PAYMENTS: PaymentRecord[] = [
     receiptDate: '2026-09-20',
     receivedQuantity: 40,
     receivedAmount: 40000,
+    receiptAmount: 40000,
     invoiceNumber: 'INV-00489',
     invoiceDate: '2026-09-23',
     invoiceQuantity: 50,
@@ -133,7 +170,17 @@ const DEFAULT_SUPPLIER_PAYMENTS: PaymentRecord[] = [
     invoiceAmount: 50000,
     amountToPay: 50000,
     reconciliationStatus: 'Exception',
-    exceptionReason: 'Invoice quantity exceeds received quantity.'
+    exceptionReason: 'Invoice quantity exceeds received quantity.',
+    quantityMatchStatus: 'MISMATCH',
+    priceMatchStatus: 'MATCHED',
+    amountMatchStatus: 'MISMATCH',
+    taxMatchStatus: 'MATCHED',
+    overallResult: 'EXCEPTION',
+    invoiceBaseAmount: 50000,
+    taxPercentage: 18,
+    calculatedTaxAmount: 9000,
+    taxAmount: 9000,
+    taxVariance: 0
   },
   {
     id: 'pay-000004-default',
@@ -151,13 +198,24 @@ const DEFAULT_SUPPLIER_PAYMENTS: PaymentRecord[] = [
     receiptDate: '2026-09-23',
     receivedQuantity: 75,
     receivedAmount: 75000,
+    receiptAmount: 75000,
     invoiceNumber: 'INV-00501',
     invoiceDate: '2026-09-24',
     invoiceQuantity: 75,
     invoiceUnitPrice: 1000,
     invoiceAmount: 75000,
     amountToPay: 75000,
-    reconciliationStatus: 'Matched'
+    reconciliationStatus: 'Matched',
+    quantityMatchStatus: 'MATCHED',
+    priceMatchStatus: 'MATCHED',
+    amountMatchStatus: 'MATCHED',
+    taxMatchStatus: 'MATCHED',
+    overallResult: 'MATCHED',
+    invoiceBaseAmount: 75000,
+    taxPercentage: 18,
+    calculatedTaxAmount: 13500,
+    taxAmount: 13500,
+    taxVariance: 0
   }
 ];
 
@@ -325,8 +383,29 @@ const Payments: React.FC = () => {
     return matchesSearch && matchesFilter;
   });
 
-  const isException = selectedPayment?.reconciliationStatus?.toLowerCase() === 'exception' ||
-    Boolean(selectedPayment?.exceptionReason && selectedPayment.exceptionReason.trim().length > 0);
+  // 4-Way Reconciliation Match Evaluations
+  const isQtyMatched = (selectedPayment?.quantityMatchStatus === 'MATCHED') ||
+    (!selectedPayment?.quantityMatchStatus &&
+      selectedPayment?.poQuantity === selectedPayment?.receivedQuantity &&
+      selectedPayment?.receivedQuantity === selectedPayment?.invoiceQuantity);
+
+  const isPriceMatched = (selectedPayment?.priceMatchStatus === 'MATCHED') ||
+    (!selectedPayment?.priceMatchStatus &&
+      selectedPayment?.poUnitPrice === selectedPayment?.invoiceUnitPrice);
+
+  const isAmountMatched = (selectedPayment?.amountMatchStatus === 'MATCHED') ||
+    (!selectedPayment?.amountMatchStatus &&
+      selectedPayment?.poAmount === (selectedPayment?.receiptAmount ?? ((selectedPayment?.poUnitPrice || 0) * (selectedPayment?.receivedQuantity || 0))));
+
+  const isTaxMatched = (selectedPayment?.taxMatchStatus === 'MATCHED') ||
+    (!selectedPayment?.taxMatchStatus &&
+      (selectedPayment?.taxVariance === undefined || selectedPayment?.taxVariance === null || Math.abs(selectedPayment.taxVariance) < 0.01));
+
+  const isAllReconMatched = isQtyMatched && isPriceMatched && isAmountMatched && isTaxMatched;
+
+  const isException = (!isAllReconMatched && selectedPayment?.reconciliationStatus?.toLowerCase() !== 'matched') ||
+    selectedPayment?.reconciliationStatus?.toLowerCase() === 'exception' ||
+    (Boolean(selectedPayment?.exceptionReason && selectedPayment.exceptionReason.trim().length > 0) && selectedPayment?.reconciliationStatus?.toLowerCase() !== 'matched');
 
   return (
     <div className="feed-layout payment-page-layout">
@@ -551,6 +630,32 @@ const Payments: React.FC = () => {
                 </button>
 
                 <div className="payment-filter-controls" style={{ margin: 0, padding: 0 }}>
+                  {!isSupplier && payments.length > 0 && (
+                    <div className="payment-filter-group" style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                      <label htmlFor="payments-select-po" style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', fontWeight: '700', whiteSpace: 'nowrap' }}>
+                        Specific PO:
+                      </label>
+                      <select
+                        id="payments-select-po"
+                        value={selectedPayment?.id || ''}
+                        onChange={(e) => {
+                          const target = payments.find(p => p.id === e.target.value || p.poNumber === e.target.value);
+                          if (target) {
+                            setSelectedPaymentId(target.id);
+                          }
+                        }}
+                        className="payment-filter-select"
+                        style={{ fontWeight: '600', color: 'var(--accent-primary)', minWidth: '160px' }}
+                      >
+                        {payments.map(p => (
+                          <option key={p.id || p.paymentId} value={p.id}>
+                            {p.poNumber ? `${p.poNumber} (${p.paymentId})` : p.paymentId}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
+
                   <div className="payment-search-box">
                     <input
                       id="payments-search-input"
@@ -594,7 +699,7 @@ const Payments: React.FC = () => {
                     >
                       <div style={{ display: 'flex', justifyContent: 'space-between', width: '100%', alignItems: 'center' }}>
                         <strong style={{ fontSize: '0.85rem', color: isSelected ? 'var(--accent-primary)' : 'var(--text-primary)' }}>
-                          {p.paymentId}
+                          {p.poNumber ? `${p.poNumber} • ${p.paymentId}` : p.paymentId}
                         </strong>
                         <span className={`badge ${getStatusBadgeClass(p.paymentStatus)}`} style={{ fontSize: '0.65rem', padding: '0.1rem 0.4rem' }}>
                           {p.paymentStatus}
@@ -623,21 +728,30 @@ const Payments: React.FC = () => {
                   </svg>
                 </div>
                 <h3 style={{ margin: '0 0 0.5rem 0' }}>No Payment Records Available</h3>
-                <p style={{ color: 'var(--text-secondary)', maxWidth: '450px', margin: '0 auto 1.5rem' }}>
-                  Payments are automatically generated from 3-way matched Purchase Orders and Invoices.
+                <p style={{ color: 'var(--text-secondary)', maxWidth: '480px', margin: '0 auto 1.5rem' }}>
+                  Payment IDs are automatically generated only for Purchase Orders that have <strong>reconciled successfully</strong> (3-way/4-way match).
                 </p>
-                <button
-                  onClick={fetchPayments}
-                  className="btn btn-primary"
-                  style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem' }}
-                >
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <polyline points="23 4 23 10 17 10"></polyline>
-                    <polyline points="1 20 1 14 7 14"></polyline>
-                    <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
-                  </svg>
-                  Refresh / Fetch Payments
-                </button>
+                <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'center', flexWrap: 'wrap' }}>
+                  <button
+                    onClick={() => navigate('/reconciliation')}
+                    className="btn btn-primary"
+                    style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem' }}
+                  >
+                    Go to Reconciliation
+                  </button>
+                  <button
+                    onClick={fetchPayments}
+                    className="btn btn-outline"
+                    style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem' }}
+                  >
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <polyline points="23 4 23 10 17 10"></polyline>
+                      <polyline points="1 20 1 14 7 14"></polyline>
+                      <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+                    </svg>
+                    Refresh
+                  </button>
+                </div>
               </div>
             )}
 
@@ -773,9 +887,9 @@ const Payments: React.FC = () => {
                       </div>
 
                       <div className="payment-total-box receipt">
-                        <span style={{ fontWeight: '700', color: 'var(--text-primary)' }}>Received Amount</span>
+                        <span style={{ fontWeight: '700', color: 'var(--text-primary)' }}>Receipt Amount</span>
                         <strong style={{ color: '#0284c7', fontSize: '1.05rem', fontWeight: '800' }}>
-                          {formatCurrency(selectedPayment.receivedAmount || (selectedPayment.poUnitPrice * selectedPayment.receivedQuantity))}
+                          {formatCurrency(selectedPayment.receiptAmount ?? (selectedPayment.poUnitPrice * selectedPayment.receivedQuantity))}
                         </strong>
                       </div>
                     </div>
@@ -825,9 +939,16 @@ const Payments: React.FC = () => {
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem', marginBottom: '1.25rem', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.75rem' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
                       <span className="payment-step-badge step-reconciliation">4</span>
-                      <h3 style={{ margin: 0, fontSize: '1.2rem', fontWeight: '700', color: 'var(--text-primary)' }}>
-                        RECONCILIATION (3-WAY MATCH)
-                      </h3>
+                      <div>
+                        <h3 style={{ margin: 0, fontSize: '1.2rem', fontWeight: '700', color: 'var(--text-primary)' }}>
+                          RECONCILIATION (3-WAY MATCH)
+                        </h3>
+                        {selectedPayment.reconciliationNumber && (
+                          <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', fontFamily: 'monospace' }}>
+                            Ref: {selectedPayment.reconciliationNumber}
+                          </span>
+                        )}
+                      </div>
                     </div>
 
                     {!isSupplier && (
@@ -847,12 +968,116 @@ const Payments: React.FC = () => {
                     )}
                   </div>
 
+                  {/* 4-Way Reconciliation Status Summary Cards */}
+                  <div style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+                    gap: '0.75rem',
+                    marginBottom: '1.25rem'
+                  }}>
+                    {/* Quantity Match Pill */}
+                    <div style={{
+                      background: isQtyMatched ? 'rgba(16, 185, 129, 0.08)' : 'rgba(239, 68, 68, 0.08)',
+                      border: `1px solid ${isQtyMatched ? 'rgba(16, 185, 129, 0.28)' : 'rgba(239, 68, 68, 0.28)'}`,
+                      borderRadius: '8px',
+                      padding: '0.75rem 0.9rem'
+                    }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.3rem' }}>
+                        <span style={{ fontSize: '0.75rem', fontWeight: '700', color: 'var(--text-secondary)', textTransform: 'uppercase' }}>
+                          Quantity Reconciliation
+                        </span>
+                        <span style={{
+                          fontSize: '0.75rem',
+                          fontWeight: '800',
+                          color: isQtyMatched ? 'var(--success)' : 'var(--error)'
+                        }}>
+                          {isQtyMatched ? '✓ Matched' : '⚠ Mismatch'}
+                        </span>
+                      </div>
+                      <div style={{ fontSize: '0.8rem', color: 'var(--text-primary)', fontWeight: '600' }}>
+                        PO: {selectedPayment.poQuantity} | Rec: {selectedPayment.receivedQuantity} | Inv: {selectedPayment.invoiceQuantity}
+                      </div>
+                    </div>
+
+                    {/* Price Match Pill */}
+                    <div style={{
+                      background: isPriceMatched ? 'rgba(16, 185, 129, 0.08)' : 'rgba(239, 68, 68, 0.08)',
+                      border: `1px solid ${isPriceMatched ? 'rgba(16, 185, 129, 0.28)' : 'rgba(239, 68, 68, 0.28)'}`,
+                      borderRadius: '8px',
+                      padding: '0.75rem 0.9rem'
+                    }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.3rem' }}>
+                        <span style={{ fontSize: '0.75rem', fontWeight: '700', color: 'var(--text-secondary)', textTransform: 'uppercase' }}>
+                          Price Reconciliation
+                        </span>
+                        <span style={{
+                          fontSize: '0.75rem',
+                          fontWeight: '800',
+                          color: isPriceMatched ? 'var(--success)' : 'var(--error)'
+                        }}>
+                          {isPriceMatched ? '✓ Matched' : '⚠ Mismatch'}
+                        </span>
+                      </div>
+                      <div style={{ fontSize: '0.8rem', color: 'var(--text-primary)', fontWeight: '600' }}>
+                        PO: {formatCurrency(selectedPayment.poUnitPrice)} | Inv: {formatCurrency(selectedPayment.invoiceUnitPrice)}
+                      </div>
+                    </div>
+
+                    {/* Amount Match Pill */}
+                    <div style={{
+                      background: isAmountMatched ? 'rgba(16, 185, 129, 0.08)' : 'rgba(239, 68, 68, 0.08)',
+                      border: `1px solid ${isAmountMatched ? 'rgba(16, 185, 129, 0.28)' : 'rgba(239, 68, 68, 0.28)'}`,
+                      borderRadius: '8px',
+                      padding: '0.75rem 0.9rem'
+                    }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.3rem' }}>
+                        <span style={{ fontSize: '0.75rem', fontWeight: '700', color: 'var(--text-secondary)', textTransform: 'uppercase' }}>
+                          Amount Reconciliation
+                        </span>
+                        <span style={{
+                          fontSize: '0.75rem',
+                          fontWeight: '800',
+                          color: isAmountMatched ? 'var(--success)' : 'var(--error)'
+                        }}>
+                          {isAmountMatched ? '✓ Matched' : '⚠ Mismatch'}
+                        </span>
+                      </div>
+                      <div style={{ fontSize: '0.8rem', color: 'var(--text-primary)', fontWeight: '600' }}>
+                        PO: {formatCurrency(selectedPayment.poAmount)} | Rec: {formatCurrency(selectedPayment.receiptAmount ?? (selectedPayment.poUnitPrice * selectedPayment.receivedQuantity))}
+                      </div>
+                    </div>
+
+                    {/* Tax Match Pill */}
+                    <div style={{
+                      background: isTaxMatched ? 'rgba(16, 185, 129, 0.08)' : 'rgba(239, 68, 68, 0.08)',
+                      border: `1px solid ${isTaxMatched ? 'rgba(16, 185, 129, 0.28)' : 'rgba(239, 68, 68, 0.28)'}`,
+                      borderRadius: '8px',
+                      padding: '0.75rem 0.9rem'
+                    }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.3rem' }}>
+                        <span style={{ fontSize: '0.75rem', fontWeight: '700', color: 'var(--text-secondary)', textTransform: 'uppercase' }}>
+                          Tax Reconciliation
+                        </span>
+                        <span style={{
+                          fontSize: '0.75rem',
+                          fontWeight: '800',
+                          color: isTaxMatched ? 'var(--success)' : 'var(--error)'
+                        }}>
+                          {isTaxMatched ? '✓ Matched' : '⚠ Mismatch'}
+                        </span>
+                      </div>
+                      <div style={{ fontSize: '0.8rem', color: 'var(--text-primary)', fontWeight: '600' }}>
+                        Rate: {selectedPayment.taxPercentage ?? 18}% | Tax: {formatCurrency(selectedPayment.taxAmount ?? selectedPayment.calculatedTaxAmount ?? (selectedPayment.poAmount * (selectedPayment.taxPercentage ?? 18) / 100))}
+                      </div>
+                    </div>
+                  </div>
+
                   {/* 3-Way Match Matrix Table */}
                   <div className="payment-table-responsive">
                     <table className="payment-match-table">
                       <thead>
                         <tr>
-                          <th>Metric</th>
+                          <th>Reconciliation Dimension</th>
                           <th>PO (Requisition)</th>
                           <th>Purchase Receipt</th>
                           <th>Invoice</th>
@@ -861,35 +1086,25 @@ const Payments: React.FC = () => {
                         </tr>
                       </thead>
                       <tbody>
-                        {/* Quantity Row */}
+                        {/* 1. Quantity Reconciliation Row */}
                         <tr>
-                          <td style={{ fontWeight: '600' }}>Quantity</td>
+                          <td style={{ fontWeight: '600' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                              <span style={{ color: 'var(--accent-primary)', fontWeight: '700' }}>1.</span> Quantity Reconciliation
+                            </div>
+                          </td>
                           <td>{selectedPayment.poQuantity}</td>
                           <td>{selectedPayment.receivedQuantity}</td>
                           <td>{selectedPayment.invoiceQuantity}</td>
-                          <td style={{ fontWeight: '600', color: selectedPayment.poQuantity === selectedPayment.invoiceQuantity ? 'var(--text-secondary)' : 'var(--error)' }}>
-                            {selectedPayment.invoiceQuantity - selectedPayment.poQuantity !== 0 ? `${selectedPayment.invoiceQuantity - selectedPayment.poQuantity > 0 ? '+' : ''}${selectedPayment.invoiceQuantity - selectedPayment.poQuantity}` : '0'}
+                          <td style={{ fontWeight: '600', color: isQtyMatched ? 'var(--text-secondary)' : 'var(--error)' }}>
+                            {selectedPayment.poVsInvoiceQtyVariance !== undefined && selectedPayment.poVsInvoiceQtyVariance !== 0
+                              ? `${selectedPayment.poVsInvoiceQtyVariance > 0 ? '+' : ''}${selectedPayment.poVsInvoiceQtyVariance}`
+                              : (selectedPayment.invoiceQuantity - selectedPayment.poQuantity !== 0
+                                ? `${selectedPayment.invoiceQuantity - selectedPayment.poQuantity > 0 ? '+' : ''}${selectedPayment.invoiceQuantity - selectedPayment.poQuantity}`
+                                : '0')}
                           </td>
                           <td>
-                            {selectedPayment.poQuantity === selectedPayment.receivedQuantity && selectedPayment.receivedQuantity === selectedPayment.invoiceQuantity ? (
-                              <span style={{ color: 'var(--success)', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '0.3rem' }}>✓ Matched</span>
-                            ) : (
-                              <span style={{ color: 'var(--warning)', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '0.3rem' }}>⚠ Mismatch</span>
-                            )}
-                          </td>
-                        </tr>
-
-                        {/* Unit Price Row */}
-                        <tr>
-                          <td style={{ fontWeight: '600' }}>Unit Price</td>
-                          <td>{formatCurrency(selectedPayment.poUnitPrice)}</td>
-                          <td style={{ color: 'var(--text-muted)' }}>—</td>
-                          <td>{formatCurrency(selectedPayment.invoiceUnitPrice)}</td>
-                          <td style={{ fontWeight: '600', color: selectedPayment.poUnitPrice === selectedPayment.invoiceUnitPrice ? 'var(--text-secondary)' : 'var(--error)' }}>
-                            {formatCurrency(Math.abs(selectedPayment.invoiceUnitPrice - selectedPayment.poUnitPrice))}
-                          </td>
-                          <td>
-                            {selectedPayment.poUnitPrice === selectedPayment.invoiceUnitPrice ? (
+                            {isQtyMatched ? (
                               <span style={{ color: 'var(--success)', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '0.3rem' }}>✓ Matched</span>
                             ) : (
                               <span style={{ color: 'var(--error)', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '0.3rem' }}>⚠ Mismatch</span>
@@ -897,20 +1112,77 @@ const Payments: React.FC = () => {
                           </td>
                         </tr>
 
-                        {/* Total Amount Row */}
+                        {/* 2. Price Reconciliation Row */}
                         <tr>
-                          <td style={{ fontWeight: '600' }}>Total Amount</td>
-                          <td style={{ fontWeight: '600' }}>{formatCurrency(selectedPayment.poAmount)}</td>
-                          <td style={{ fontWeight: '600' }}>{formatCurrency(selectedPayment.receivedAmount || (selectedPayment.poUnitPrice * selectedPayment.receivedQuantity))}</td>
-                          <td style={{ fontWeight: '600' }}>{formatCurrency(selectedPayment.invoiceAmount || selectedPayment.amountToPay)}</td>
-                          <td style={{ fontWeight: '600', color: (selectedPayment.poAmount === selectedPayment.invoiceAmount) ? 'var(--text-secondary)' : 'var(--error)' }}>
-                            {formatCurrency(Math.abs((selectedPayment.invoiceAmount || selectedPayment.amountToPay) - selectedPayment.poAmount))}
+                          <td style={{ fontWeight: '600' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                              <span style={{ color: 'var(--accent-primary)', fontWeight: '700' }}>2.</span> Price Reconciliation
+                            </div>
+                          </td>
+                          <td>{formatCurrency(selectedPayment.poUnitPrice)}</td>
+                          <td style={{ color: 'var(--text-muted)' }}>—</td>
+                          <td>{formatCurrency(selectedPayment.invoiceUnitPrice)}</td>
+                          <td style={{ fontWeight: '600', color: isPriceMatched ? 'var(--text-secondary)' : 'var(--error)' }}>
+                            {formatCurrency(selectedPayment.priceVariance ?? Math.abs(selectedPayment.invoiceUnitPrice - selectedPayment.poUnitPrice))}
                           </td>
                           <td>
-                            {selectedPayment.poAmount === (selectedPayment.receivedAmount || selectedPayment.poAmount) && selectedPayment.poAmount === (selectedPayment.invoiceAmount || selectedPayment.amountToPay) ? (
+                            {isPriceMatched ? (
                               <span style={{ color: 'var(--success)', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '0.3rem' }}>✓ Matched</span>
                             ) : (
-                              <span style={{ color: 'var(--warning)', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '0.3rem' }}>⚠ Mismatch</span>
+                              <span style={{ color: 'var(--error)', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '0.3rem' }}>⚠ Mismatch</span>
+                            )}
+                          </td>
+                        </tr>
+
+                        {/* 3. Amount Reconciliation Row */}
+                        <tr>
+                          <td style={{ fontWeight: '600' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                              <span style={{ color: 'var(--accent-primary)', fontWeight: '700' }}>3.</span> Amount Reconciliation
+                            </div>
+                          </td>
+                          <td style={{ fontWeight: '600' }}>{formatCurrency(selectedPayment.poAmount)}</td>
+                          <td style={{ fontWeight: '600' }}>{formatCurrency(selectedPayment.receiptAmount ?? (selectedPayment.poUnitPrice * selectedPayment.receivedQuantity))}</td>
+                          <td style={{ fontWeight: '600' }}>
+                            {formatCurrency(selectedPayment.invoiceBaseAmount ?? selectedPayment.poAmount)}
+                            <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', display: 'block', fontWeight: 'normal' }}>(Base Excl. Tax)</span>
+                          </td>
+                          <td style={{ fontWeight: '600', color: isAmountMatched ? 'var(--text-secondary)' : 'var(--error)' }}>
+                            {formatCurrency(selectedPayment.amountVariance ?? 0)}
+                          </td>
+                          <td>
+                            {isAmountMatched ? (
+                              <span style={{ color: 'var(--success)', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '0.3rem' }}>✓ Matched</span>
+                            ) : (
+                              <span style={{ color: 'var(--error)', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '0.3rem' }}>⚠ Mismatch</span>
+                            )}
+                          </td>
+                        </tr>
+
+                        {/* 4. Tax Reconciliation Row */}
+                        <tr>
+                          <td style={{ fontWeight: '600' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                              <span style={{ color: 'var(--accent-primary)', fontWeight: '700' }}>4.</span> Tax Reconciliation
+                            </div>
+                          </td>
+                          <td>
+                            <div>Rate: {selectedPayment.taxPercentage ?? 18}%</div>
+                            <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>Taxable: {formatCurrency(selectedPayment.poAmount)}</span>
+                          </td>
+                          <td style={{ color: 'var(--text-muted)' }}>—</td>
+                          <td>
+                            <div>Inv Tax: {formatCurrency(selectedPayment.taxAmount ?? selectedPayment.calculatedTaxAmount ?? (selectedPayment.poAmount * (selectedPayment.taxPercentage ?? 18) / 100))}</div>
+                            <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>Calc: {formatCurrency(selectedPayment.calculatedTaxAmount ?? (selectedPayment.poAmount * (selectedPayment.taxPercentage ?? 18) / 100))}</span>
+                          </td>
+                          <td style={{ fontWeight: '600', color: isTaxMatched ? 'var(--text-secondary)' : 'var(--error)' }}>
+                            {formatCurrency(selectedPayment.taxVariance ?? 0)}
+                          </td>
+                          <td>
+                            {isTaxMatched ? (
+                              <span style={{ color: 'var(--success)', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '0.3rem' }}>✓ Matched</span>
+                            ) : (
+                              <span style={{ color: 'var(--error)', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '0.3rem' }}>⚠ Mismatch</span>
                             )}
                           </td>
                         </tr>
@@ -924,9 +1196,11 @@ const Payments: React.FC = () => {
                       <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
                         <span style={{ fontSize: '1.25rem', color: 'var(--success)', fontWeight: 'bold' }}>✓</span>
                         <div>
-                          <strong style={{ color: '#047857', fontSize: '0.95rem' }}>Reconciliation Status: ✓ Matched</strong>
+                          <strong style={{ color: '#047857', fontSize: '0.95rem' }}>
+                            Reconciliation Status: ✓ {selectedPayment.reconciliationStatus || 'Matched'}
+                          </strong>
                           <div style={{ fontSize: '0.8rem', color: '#065f46', marginTop: '0.1rem' }}>
-                            All 3-way check invariants (PO, Purchase Receipt, and Invoice quantities & pricing) match perfectly.
+                            All 4 Reconciliation dimensions (Quantity, Price, Amount, and Tax) are verified and matched from Reconciliation functionality.
                           </div>
                         </div>
                       </div>

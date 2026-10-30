@@ -98,8 +98,8 @@ const HeaderNav: React.FC = () => {
   };
 
   const avatarUrl = profileData?.profilePicture ? getMediaUrl(profileData.profilePicture) : '';
-  const displayName = profileData?.firstName && profileData?.lastName 
-    ? `${profileData.firstName} ${profileData.lastName}` 
+  const displayName = profileData?.firstName && profileData?.lastName
+    ? `${profileData.firstName} ${profileData.lastName}`
     : (profileData?.organizationName || user?.email || '');
 
   const organizationNameDisplay = profileData?.organizationName?.trim() || 'N/A';
@@ -251,7 +251,75 @@ const HeaderNav: React.FC = () => {
                       </svg>
                       View Profile
                     </button>
+                  </div>
 
+                  <div className="profile-flyout-divider" />
+
+                  {/* Legal & Policy Links */}
+                  <div className="profile-flyout-legal-menu">
+                    <div className="flyout-section-title">Legal & Policies</div>
+                    <Link
+                      to="/terms-and-conditions"
+                      className="profile-flyout-link-item"
+                      onClick={() => setShowProfileDropdown(false)}
+                      title="Terms and Conditions"
+                    >
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                        <polyline points="14 2 14 8 20 8"></polyline>
+                        <line x1="16" y1="13" x2="8" y2="13"></line>
+                        <line x1="16" y1="17" x2="8" y2="17"></line>
+                        <polyline points="10 9 9 9 8 9"></polyline>
+                      </svg>
+                      <span>Terms and Conditions</span>
+                    </Link>
+
+                    <Link
+                      to="/privacy-policy"
+                      className="profile-flyout-link-item"
+                      onClick={() => setShowProfileDropdown(false)}
+                      title="Privacy Policy"
+                    >
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
+                      </svg>
+                      <span>Privacy Policy</span>
+                    </Link>
+
+                    <Link
+                      to="/code-of-conduct"
+                      className="profile-flyout-link-item"
+                      onClick={() => setShowProfileDropdown(false)}
+                      title="Code of Conduct"
+                    >
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+                        <circle cx="9" cy="7" r="4"></circle>
+                        <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
+                        <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+                      </svg>
+                      <span>Code of Conduct</span>
+                    </Link>
+
+                    <Link
+                      to="/disclaimer"
+                      className="profile-flyout-link-item"
+                      onClick={() => setShowProfileDropdown(false)}
+                      title="Disclaimer"
+                    >
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <circle cx="12" cy="12" r="10"></circle>
+                        <line x1="12" y1="8" x2="12" y2="12"></line>
+                        <line x1="12" y1="16" x2="12.01" y2="16"></line>
+                      </svg>
+                      <span>Disclaimer</span>
+                    </Link>
+                  </div>
+
+                  <div className="profile-flyout-divider" />
+
+                  {/* Sign Out (Available at last in flyout window) */}
+                  <div className="profile-flyout-actions profile-flyout-signout-wrapper">
                     <button
                       type="button"
                       className="profile-flyout-btn logout-btn"

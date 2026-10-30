@@ -481,7 +481,7 @@ public class PurchaseReceiptService {
         }
         if ((currencyType == null || currencyType.isBlank()) && r.getPurchaseOrder() != null && r.getPurchaseOrder().getItems() != null && !r.getPurchaseOrder().getItems().isEmpty()) {
             currencyType = r.getPurchaseOrder().getItems().stream()
-                    .map(RequisitionItem::getCurrencyType)
+                    .map(item -> item != null ? item.getCurrencyType() : null)
                     .filter(c -> c != null && !c.isBlank())
                     .findFirst()
                     .orElse("USD");

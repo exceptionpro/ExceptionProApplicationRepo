@@ -41,7 +41,15 @@ public class ReconciliationSaveRequest {
     private BigDecimal poVsInvoiceAmtVariance;
     private String amountMatchStatus;
 
-    // 4. Result
+    // 4. Tax
+    private BigDecimal taxPercentage;
+    private BigDecimal taxAmount;
+    private BigDecimal calculatedTaxAmount;
+    private BigDecimal taxVariance;
+    private String taxMatchStatus;
+    private BigDecimal invoiceBaseAmount;
+
+    // 5. Result
     private String overallResult;
     private String remarks;
 
@@ -291,5 +299,53 @@ public class ReconciliationSaveRequest {
 
     public void setRemarks(String remarks) {
         this.remarks = remarks;
+    }
+
+    public BigDecimal getTaxPercentage() {
+        return taxPercentage;
+    }
+
+    public void setTaxPercentage(BigDecimal taxPercentage) {
+        this.taxPercentage = taxPercentage;
+    }
+
+    public BigDecimal getTaxAmount() {
+        return taxAmount;
+    }
+
+    public void setTaxAmount(BigDecimal taxAmount) {
+        this.taxAmount = taxAmount;
+    }
+
+    public BigDecimal getCalculatedTaxAmount() {
+        return calculatedTaxAmount;
+    }
+
+    public void setCalculatedTaxAmount(BigDecimal calculatedTaxAmount) {
+        this.calculatedTaxAmount = calculatedTaxAmount;
+    }
+
+    public BigDecimal getTaxVariance() {
+        return taxVariance;
+    }
+
+    public void setTaxVariance(BigDecimal taxVariance) {
+        this.taxVariance = taxVariance;
+    }
+
+    public String getTaxMatchStatus() {
+        return taxMatchStatus;
+    }
+
+    public void setTaxMatchStatus(String taxMatchStatus) {
+        this.taxMatchStatus = taxMatchStatus;
+    }
+
+    public BigDecimal getInvoiceBaseAmount() {
+        return invoiceBaseAmount;
+    }
+
+    public void setInvoiceBaseAmount(BigDecimal invoiceBaseAmount) {
+        this.invoiceBaseAmount = invoiceBaseAmount;
     }
 }

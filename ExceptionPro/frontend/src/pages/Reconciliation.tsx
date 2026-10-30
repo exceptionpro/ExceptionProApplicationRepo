@@ -41,13 +41,22 @@ interface ReconciliationRecord {
   poAmount: number;
   receiptAmount: number;
   invoiceAmount: number;
+  invoiceBaseAmount?: number;
   poVsReceiptAmtVariance: number;
   receiptVsInvoiceAmtVariance: number;
   poVsInvoiceAmtVariance: number;
   amountMatchStatus: string;
   amountMatch: string;
 
-  // 4. Result & Remarks
+  // 4. Tax
+  taxPercentage?: number;
+  taxAmount?: number;
+  calculatedTaxAmount?: number;
+  taxVariance?: number;
+  taxMatchStatus?: string;
+  taxMatch?: string;
+
+  // 5. Result & Remarks
   overallResult: string;
   remarks?: string;
 }
@@ -73,31 +82,40 @@ const Reconciliation: React.FC = () => {
   // ii) Quantity Reconciliation
   const [poQuantity, setPoQuantity] = useState<number>(100);
   const [receiptQuantity, setReceiptQuantity] = useState<number>(95);
-  const [invoiceQuantity, setInvoiceQuantity] = useState<number>(95);
+  const [invoiceQuantity, setInvoiceQuantity] = useState<number>(100);
   const [poVsReceiptQtyVariance, setPoVsReceiptQtyVariance] = useState<number>(-5);
-  const [receiptVsInvoiceQtyVariance, setReceiptVsInvoiceQtyVariance] = useState<number>(0);
-  const [poVsInvoiceQtyVariance, setPoVsInvoiceQtyVariance] = useState<number>(-5);
+  const [receiptVsInvoiceQtyVariance, setReceiptVsInvoiceQtyVariance] = useState<number>(5);
+  const [poVsInvoiceQtyVariance, setPoVsInvoiceQtyVariance] = useState<number>(0);
   const [quantityMatchStatus, setQuantityMatchStatus] = useState<string>('PARTIAL');
 
   // iii) Price Reconciliation
   const [poUnitPrice, setPoUnitPrice] = useState<number>(1000);
-  const [invoiceUnitPrice, setInvoiceUnitPrice] = useState<number>(1050);
-  const [priceVariance, setPriceVariance] = useState<number>(50);
-  const [priceVariancePercentage, setPriceVariancePercentage] = useState<number>(5.0);
-  const [priceMatchStatus, setPriceMatchStatus] = useState<string>('MISMATCH');
+  const [invoiceUnitPrice, setInvoiceUnitPrice] = useState<number>(1000);
+  const [priceVariance, setPriceVariance] = useState<number>(0);
+  const [priceVariancePercentage, setPriceVariancePercentage] = useState<number>(0);
+  const [priceMatchStatus, setPriceMatchStatus] = useState<string>('MATCHED');
 
   // iv) Amount Reconciliation
   const [poAmount, setPoAmount] = useState<number>(100000);
   const [receiptAmount, setReceiptAmount] = useState<number>(95000);
-  const [invoiceAmount, setInvoiceAmount] = useState<number>(95000);
+  const [invoiceAmount, setInvoiceAmount] = useState<number>(118000); // With Tax
+  const [invoiceBaseAmount, setInvoiceBaseAmount] = useState<number>(100000); // Excl Tax
   const [poVsReceiptAmtVariance, setPoVsReceiptAmtVariance] = useState<number>(-5000);
-  const [receiptVsInvoiceAmtVariance, setReceiptVsInvoiceAmtVariance] = useState<number>(0);
-  const [poVsInvoiceAmtVariance, setPoVsInvoiceAmtVariance] = useState<number>(-5000);
+  const [receiptVsInvoiceAmtVariance, setReceiptVsInvoiceAmtVariance] = useState<number>(5000);
+  const [poVsInvoiceAmtVariance, setPoVsInvoiceAmtVariance] = useState<number>(0);
   const [amountMatchStatus, setAmountMatchStatus] = useState<string>('PARTIAL');
 
-  // v) Reconciliation Result
+  // v) Tax Reconciliation (Requirement 4)
+  const [taxPercentage, setTaxPercentage] = useState<number>(18);
+  const [calculatedTaxAmount, setCalculatedTaxAmount] = useState<number>(18000);
+  const [taxAmount, setTaxAmount] = useState<number>(18000);
+  const [taxVariance, setTaxVariance] = useState<number>(0);
+  const [taxMatchStatus, setTaxMatchStatus] = useState<string>('MATCHED');
+  const [taxMatch, setTaxMatch] = useState<string>('MATCHED');
+
+  // vi) Reconciliation Result
   const [quantityMatch, setQuantityMatch] = useState<string>('PARTIAL');
-  const [priceMatch, setPriceMatch] = useState<string>('MISMATCH');
+  const [priceMatch, setPriceMatch] = useState<string>('MATCHED');
   const [amountMatch, setAmountMatch] = useState<string>('PARTIAL');
   const [overallResult, setOverallResult] = useState<string>('EXCEPTION');
   const [remarks, setRemarks] = useState<string>('');
@@ -117,6 +135,8 @@ const Reconciliation: React.FC = () => {
           const first = res.data.records[0];
           populateFormWithRecord(first);
           setSelectedRecordId(first.id);
+        } else {
+          clearForm();
         }
       }
     } catch (err: any) {
@@ -125,6 +145,58 @@ const Reconciliation: React.FC = () => {
     } finally {
       setLoading(false);
     }
+  };
+
+  const clearForm = () => {
+    setSelectedRecordId('');
+    setReconciliationNumber(`REC-${new Date().getFullYear()}-0001`);
+    setReconciliationDate(new Date().toISOString().split('T')[0]);
+    setSupplier('');
+    setPoNumber('');
+    setReceiptGrnNumber('N/A');
+    setInvoiceNumber('N/A');
+    setStatus('NONE');
+
+    // ii) Quantity
+    setPoQuantity(0);
+    setReceiptQuantity(0);
+    setInvoiceQuantity(0);
+    setPoVsReceiptQtyVariance(0);
+    setReceiptVsInvoiceQtyVariance(0);
+    setPoVsInvoiceQtyVariance(0);
+    setQuantityMatchStatus('NONE');
+    setQuantityMatch('NONE');
+
+    // iii) Price
+    setPoUnitPrice(0);
+    setInvoiceUnitPrice(0);
+    setPriceVariance(0);
+    setPriceVariancePercentage(0);
+    setPriceMatchStatus('NONE');
+    setPriceMatch('NONE');
+
+    // iv) Amount
+    setPoAmount(0);
+    setReceiptAmount(0);
+    setInvoiceAmount(0);
+    setInvoiceBaseAmount(0);
+    setPoVsReceiptAmtVariance(0);
+    setReceiptVsInvoiceAmtVariance(0);
+    setPoVsInvoiceAmtVariance(0);
+    setAmountMatchStatus('NONE');
+    setAmountMatch('NONE');
+
+    // v) Tax
+    setTaxPercentage(0);
+    setCalculatedTaxAmount(0);
+    setTaxAmount(0);
+    setTaxVariance(0);
+    setTaxMatchStatus('NONE');
+    setTaxMatch('NONE');
+
+    // vi) Result & Remarks
+    setOverallResult('NONE');
+    setRemarks('');
   };
 
   const populateFormWithRecord = (rec: ReconciliationRecord) => {
@@ -159,13 +231,35 @@ const Reconciliation: React.FC = () => {
     setPoAmount(rec.poAmount || 0);
     setReceiptAmount(rec.receiptAmount || 0);
     setInvoiceAmount(rec.invoiceAmount || 0);
+    const baseAmt = (rec.invoiceBaseAmount !== undefined && rec.invoiceBaseAmount !== null)
+      ? rec.invoiceBaseAmount
+      : (rec.invoiceAmount || 0);
+    setInvoiceBaseAmount(baseAmt);
     setPoVsReceiptAmtVariance(rec.poVsReceiptAmtVariance || 0);
     setReceiptVsInvoiceAmtVariance(rec.receiptVsInvoiceAmtVariance || 0);
     setPoVsInvoiceAmtVariance(rec.poVsInvoiceAmtVariance || 0);
     setAmountMatchStatus(rec.amountMatchStatus || 'PARTIAL');
     setAmountMatch(rec.amountMatch || rec.amountMatchStatus || 'PARTIAL');
 
-    // v) Result & Remarks
+    // v) Tax Reconciliation
+    const taxPct = rec.taxPercentage !== undefined && rec.taxPercentage !== null ? rec.taxPercentage : 0;
+    const calcTax = (rec.calculatedTaxAmount !== undefined && rec.calculatedTaxAmount !== null)
+      ? rec.calculatedTaxAmount
+      : Number(((rec.poAmount || 0) * taxPct / 100).toFixed(2));
+    const invTax = (rec.taxAmount !== undefined && rec.taxAmount !== null) ? rec.taxAmount : 0;
+    const tVar = (rec.taxVariance !== undefined && rec.taxVariance !== null)
+      ? rec.taxVariance
+      : Number((invTax - calcTax).toFixed(2));
+    const tStatus = rec.taxMatchStatus || (tVar === 0 && (rec.poAmount || 0) > 0 ? 'MATCHED' : 'MISMATCH');
+
+    setTaxPercentage(taxPct);
+    setCalculatedTaxAmount(calcTax);
+    setTaxAmount(invTax);
+    setTaxVariance(tVar);
+    setTaxMatchStatus(tStatus);
+    setTaxMatch(rec.taxMatch || tStatus);
+
+    // vi) Result & Remarks
     setOverallResult(rec.overallResult || 'EXCEPTION');
     setRemarks(rec.remarks || '');
   };
@@ -220,21 +314,22 @@ const Reconciliation: React.FC = () => {
     setPriceMatchStatus(pStatus);
     setPriceMatch(pStatus);
 
-    // iv) Amount Reconciliation
+    // iv) Amount Reconciliation (Requirement 3: invoice amount considered excluding tax during variance calculation)
+    const effectiveInvoiceBase = invoiceBaseAmount > 0 ? invoiceBaseAmount : invoiceAmount;
     const poVsRecAmt = Number((receiptAmount - poAmount).toFixed(2));
-    const recVsInvAmt = Number((invoiceAmount - receiptAmount).toFixed(2));
-    const poVsInvAmt = Number((invoiceAmount - poAmount).toFixed(2));
+    const recVsInvAmt = Number((effectiveInvoiceBase - receiptAmount).toFixed(2));
+    const poVsInvAmt = Number((effectiveInvoiceBase - poAmount).toFixed(2));
 
     setPoVsReceiptAmtVariance(poVsRecAmt);
     setReceiptVsInvoiceAmtVariance(recVsInvAmt);
     setPoVsInvoiceAmtVariance(poVsInvAmt);
 
     let aStatus = 'PARTIAL';
-    if (poAmount === receiptAmount && receiptAmount === invoiceAmount && poAmount > 0) {
+    if (poAmount === receiptAmount && receiptAmount === effectiveInvoiceBase && poAmount > 0) {
       aStatus = 'MATCHED';
-    } else if (poAmount === 0 && receiptAmount === 0 && invoiceAmount === 0) {
+    } else if (poAmount === 0 && receiptAmount === 0 && effectiveInvoiceBase === 0) {
       aStatus = 'MISMATCH';
-    } else if (receiptAmount > 0 || invoiceAmount > 0) {
+    } else if (receiptAmount > 0 || effectiveInvoiceBase > 0) {
       aStatus = 'PARTIAL';
     } else {
       aStatus = 'MISMATCH';
@@ -242,9 +337,19 @@ const Reconciliation: React.FC = () => {
     setAmountMatchStatus(aStatus);
     setAmountMatch(aStatus);
 
-    // v) Overall Result
+    // v) Tax Reconciliation (Requirement 4: (PO Amount * Percentage of Tax)/100)
+    const calcTax = Number(((poAmount * taxPercentage) / 100).toFixed(2));
+    setCalculatedTaxAmount(calcTax);
+    const tVar = Number((taxAmount - calcTax).toFixed(2));
+    setTaxVariance(tVar);
+
+    const tStatus = (tVar === 0 && poAmount > 0) ? 'MATCHED' : 'MISMATCH';
+    setTaxMatchStatus(tStatus);
+    setTaxMatch(tStatus);
+
+    // vi) Overall Result
     let overall = 'EXCEPTION';
-    if (qStatus === 'MATCHED' && pStatus === 'MATCHED' && aStatus === 'MATCHED') {
+    if (qStatus === 'MATCHED' && pStatus === 'MATCHED' && aStatus === 'MATCHED' && tStatus === 'MATCHED') {
       overall = 'MATCHED';
     } else {
       overall = 'EXCEPTION';
@@ -296,12 +401,20 @@ const Reconciliation: React.FC = () => {
       poAmount,
       receiptAmount,
       invoiceAmount,
+      invoiceBaseAmount,
       poVsReceiptAmtVariance,
       receiptVsInvoiceAmtVariance,
       poVsInvoiceAmtVariance,
       amountMatchStatus,
 
-      // v) Result & Remarks
+      // v) Tax
+      taxPercentage,
+      calculatedTaxAmount,
+      taxAmount,
+      taxVariance,
+      taxMatchStatus,
+
+      // vi) Result & Remarks
       overallResult,
       remarks
     };
@@ -441,6 +554,27 @@ const Reconciliation: React.FC = () => {
               </select>
             </div>
           </div>
+
+          {/* Note when no eligible POs */}
+          {records.length === 0 && !loading && (
+            <div style={{
+              marginTop: '0.75rem',
+              padding: '0.75rem 1rem',
+              backgroundColor: '#eff6ff',
+              border: '1px solid #bfdbfe',
+              borderRadius: '8px',
+              color: '#1e40af',
+              fontSize: '0.85rem',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.5rem'
+            }}>
+              <span>ℹ️</span>
+              <span>
+                <strong>No Purchase Orders currently eligible for reconciliation.</strong> An order appears here when the Supplier has created an Invoice and the Buyer's Purchase Receipts are approved by the Supplier.
+              </span>
+            </div>
+          )}
 
           {/* 3. Refresh Button */}
           <div className="reconciliation-field-row" style={{ marginTop: '0.25rem', alignItems: 'center' }}>
@@ -822,6 +956,9 @@ const Reconciliation: React.FC = () => {
                         className="form-control reconciliation-input text-po has-currency"
                       />
                     </div>
+                    <small style={{ color: 'var(--text-secondary)', fontSize: '0.72rem', marginTop: '4px', display: 'block' }}>
+                      PO Quantity × PO Unit Price
+                    </small>
                   </div>
 
                   <div className="reconciliation-input-box receipt">
@@ -839,11 +976,14 @@ const Reconciliation: React.FC = () => {
                         className="form-control reconciliation-input text-receipt has-currency"
                       />
                     </div>
+                    <small style={{ color: 'var(--text-secondary)', fontSize: '0.72rem', marginTop: '4px', display: 'block' }}>
+                      Received Quantity × PO Price
+                    </small>
                   </div>
 
                   <div className="reconciliation-input-box invoice">
                     <label className="reconciliation-box-label label-invoice">
-                      Invoice Amount
+                      Invoice Amount (Excl. Tax)
                     </label>
                     <div className="reconciliation-input-wrapper">
                       <span className="reconciliation-curr-symbol text-invoice">
@@ -851,15 +991,18 @@ const Reconciliation: React.FC = () => {
                       </span>
                       <input
                         type="number"
-                        value={invoiceAmount}
-                        onChange={(e) => setInvoiceAmount(Number(e.target.value))}
+                        value={invoiceBaseAmount}
+                        onChange={(e) => setInvoiceBaseAmount(Number(e.target.value))}
                         className="form-control reconciliation-input text-invoice has-currency"
                       />
                     </div>
+                    <small style={{ color: 'var(--text-secondary)', fontSize: '0.72rem', marginTop: '4px', display: 'block' }}>
+                      Base Invoiced PO Amount (Total with Tax: {currSym}{invoiceAmount})
+                    </small>
                   </div>
                 </div>
 
-                {/* Amount Variances Table */}
+                {/* Amount Variances Table (Excluding Tax) */}
                 <div className="reconciliation-variance-panel">
                   <div className="reconciliation-variance-grid grid-3">
                     <div className="reconciliation-variance-item">
@@ -885,7 +1028,149 @@ const Reconciliation: React.FC = () => {
               </div>
 
               {/* ---------------------------------------------------- */}
-              {/* v) RECONCILIATION RESULT                             */}
+              {/* v) TAX RECONCILIATION (Requirement 4)                */}
+              {/* ---------------------------------------------------- */}
+              <div className="reconciliation-sub-section">
+                <div className="reconciliation-sub-header">
+                  <h3 className="reconciliation-sub-title">
+                    Tax Reconciliation
+                  </h3>
+                  <span style={{ fontSize: '0.85rem', fontWeight: 700, color: getStatusColor(taxMatchStatus) }}>
+                    Tax Match Status: <strong>{taxMatchStatus}</strong>
+                  </span>
+                </div>
+
+                {/* 4 Tax Cards Row */}
+                <div className="reconciliation-cards-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem', marginBottom: '1.25rem' }}>
+                  <div className="reconciliation-input-box po">
+                    <label className="reconciliation-box-label label-po">
+                      PO Amount (Taxable)
+                    </label>
+                    <div className="reconciliation-input-wrapper">
+                      <span className="reconciliation-curr-symbol text-po">
+                        {currSym}
+                      </span>
+                      <input
+                        type="number"
+                        value={poAmount}
+                        onChange={(e) => setPoAmount(Number(e.target.value))}
+                        className="form-control reconciliation-input text-po has-currency"
+                      />
+                    </div>
+                    <small style={{ color: 'var(--text-secondary)', fontSize: '0.72rem', marginTop: '4px', display: 'block' }}>
+                      PO Quantity × PO Unit Price
+                    </small>
+                  </div>
+
+                  <div className="reconciliation-input-box receipt">
+                    <label className="reconciliation-box-label label-receipt">
+                      Tax Percentage (%)
+                    </label>
+                    <div className="reconciliation-input-wrapper">
+                      <span className="reconciliation-curr-symbol text-receipt" style={{ color: '#0d9488' }}>
+                        %
+                      </span>
+                      <input
+                        type="number"
+                        step="0.01"
+                        value={taxPercentage}
+                        onChange={(e) => {
+                          const pct = Number(e.target.value);
+                          setTaxPercentage(pct);
+                          const calcTax = Number(((poAmount * pct) / 100).toFixed(2));
+                          setCalculatedTaxAmount(calcTax);
+                          const tVar = Number((taxAmount - calcTax).toFixed(2));
+                          setTaxVariance(tVar);
+                          const st = (tVar === 0 && poAmount > 0) ? 'MATCHED' : 'MISMATCH';
+                          setTaxMatchStatus(st);
+                          setTaxMatch(st);
+                        }}
+                        className="form-control reconciliation-input text-receipt has-currency"
+                      />
+                    </div>
+                    <small style={{ color: 'var(--text-secondary)', fontSize: '0.72rem', marginTop: '4px', display: 'block' }}>
+                      Tax Rate from Invoice
+                    </small>
+                  </div>
+
+                  <div className="reconciliation-input-box invoice">
+                    <label className="reconciliation-box-label label-invoice" style={{ color: '#2563eb' }}>
+                      Calculated Tax Amount
+                    </label>
+                    <div className="reconciliation-input-wrapper">
+                      <span className="reconciliation-curr-symbol text-invoice" style={{ color: '#2563eb' }}>
+                        {currSym}
+                      </span>
+                      <input
+                        type="number"
+                        value={calculatedTaxAmount}
+                        readOnly
+                        style={{ background: '#f8fafc' }}
+                        className="form-control reconciliation-input has-currency"
+                      />
+                    </div>
+                    <small style={{ color: 'var(--text-secondary)', fontSize: '0.72rem', marginTop: '4px', display: 'block' }}>
+                      (PO Amount × Tax %) / 100
+                    </small>
+                  </div>
+
+                  <div className="reconciliation-input-box invoice">
+                    <label className="reconciliation-box-label label-invoice">
+                      Invoice Tax Amount
+                    </label>
+                    <div className="reconciliation-input-wrapper">
+                      <span className="reconciliation-curr-symbol text-invoice">
+                        {currSym}
+                      </span>
+                      <input
+                        type="number"
+                        step="0.01"
+                        value={taxAmount}
+                        onChange={(e) => {
+                          const invTax = Number(e.target.value);
+                          setTaxAmount(invTax);
+                          const tVar = Number((invTax - calculatedTaxAmount).toFixed(2));
+                          setTaxVariance(tVar);
+                          const st = (tVar === 0 && poAmount > 0) ? 'MATCHED' : 'MISMATCH';
+                          setTaxMatchStatus(st);
+                          setTaxMatch(st);
+                        }}
+                        className="form-control reconciliation-input text-invoice has-currency"
+                      />
+                    </div>
+                    <small style={{ color: 'var(--text-secondary)', fontSize: '0.72rem', marginTop: '4px', display: 'block' }}>
+                      Billed Tax Amount on Invoice
+                    </small>
+                  </div>
+                </div>
+
+                {/* Tax Variances Table */}
+                <div className="reconciliation-variance-panel">
+                  <div className="reconciliation-variance-grid grid-3">
+                    <div className="reconciliation-variance-item">
+                      <span className="variance-label">Tax Variance (Invoice Tax - Calc Tax):</span>
+                      <strong className="variance-val" style={{ color: taxVariance === 0 ? '#10b981' : '#ef4444' }}>
+                        {currSym}{taxVariance > 0 ? `+${taxVariance}` : taxVariance}
+                      </strong>
+                    </div>
+                    <div className="reconciliation-variance-item">
+                      <span className="variance-label">Total Invoice Amount (PO Amount + Tax):</span>
+                      <strong className="variance-val" style={{ color: '#2563eb' }}>
+                        {currSym}{Number((poAmount + taxAmount).toFixed(2))}
+                      </strong>
+                    </div>
+                    <div className="reconciliation-variance-item">
+                      <span className="variance-label">Tax Match Decision:</span>
+                      <strong className="variance-val" style={{ color: getStatusColor(taxMatchStatus) }}>
+                        {taxMatchStatus}
+                      </strong>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* ---------------------------------------------------- */}
+              {/* vi) RECONCILIATION RESULT                            */}
               {/* ---------------------------------------------------- */}
               <div className="reconciliation-sub-section" style={{ marginBottom: 0 }}>
                 <div className="reconciliation-sub-header">
@@ -895,7 +1180,7 @@ const Reconciliation: React.FC = () => {
                 </div>
 
                 {/* Results Matrix */}
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1rem', marginBottom: '1.5rem' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '1rem', marginBottom: '1.5rem' }}>
                   <div className="reconciliation-result-card">
                     <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>Quantity Match</span>
                     <span style={{ fontWeight: 800, color: getStatusColor(quantityMatch) }}>{quantityMatch}</span>
@@ -909,6 +1194,11 @@ const Reconciliation: React.FC = () => {
                   <div className="reconciliation-result-card">
                     <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>Amount Match</span>
                     <span style={{ fontWeight: 800, color: getStatusColor(amountMatch) }}>{amountMatch}</span>
+                  </div>
+
+                  <div className="reconciliation-result-card">
+                    <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>Tax Match</span>
+                    <span style={{ fontWeight: 800, color: getStatusColor(taxMatch) }}>{taxMatch}</span>
                   </div>
 
                   <div style={{ background: getStatusColor(overallResult), color: '#ffffff', padding: '1rem 1.25rem', borderRadius: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
