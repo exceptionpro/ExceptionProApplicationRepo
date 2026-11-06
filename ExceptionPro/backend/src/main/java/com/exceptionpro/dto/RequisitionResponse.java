@@ -16,6 +16,9 @@ public class RequisitionResponse {
     private LocalDate needByDate;
     private String comments;
     private String supplierComment;
+    private boolean supplierModified;
+    private String buyerModificationStatus;
+    private String buyerComment;
     private String cancellationReason;
     private String status;
     private LocalDateTime createdAt;
@@ -25,6 +28,7 @@ public class RequisitionResponse {
     private UUID supplierId;
     private String supplierEmail;
     private String supplierName;
+    private boolean hasPurchaseReceipt;
     private List<RequisitionItemDto> items = new ArrayList<>();
 
     public RequisitionResponse() {}
@@ -140,6 +144,30 @@ public class RequisitionResponse {
         this.supplierComment = supplierComment;
     }
 
+    public boolean isSupplierModified() {
+        return supplierModified;
+    }
+
+    public void setSupplierModified(boolean supplierModified) {
+        this.supplierModified = supplierModified;
+    }
+
+    public String getBuyerModificationStatus() {
+        return buyerModificationStatus;
+    }
+
+    public void setBuyerModificationStatus(String buyerModificationStatus) {
+        this.buyerModificationStatus = buyerModificationStatus;
+    }
+
+    public String getBuyerComment() {
+        return buyerComment;
+    }
+
+    public void setBuyerComment(String buyerComment) {
+        this.buyerComment = buyerComment;
+    }
+
     public String getCancellationReason() {
         return cancellationReason;
     }
@@ -210,6 +238,14 @@ public class RequisitionResponse {
 
     public void setSupplierName(String supplierName) {
         this.supplierName = supplierName;
+    }
+
+    public boolean isHasPurchaseReceipt() {
+        return hasPurchaseReceipt;
+    }
+
+    public void setHasPurchaseReceipt(boolean hasPurchaseReceipt) {
+        this.hasPurchaseReceipt = hasPurchaseReceipt;
     }
 
     public List<RequisitionItemDto> getItems() {

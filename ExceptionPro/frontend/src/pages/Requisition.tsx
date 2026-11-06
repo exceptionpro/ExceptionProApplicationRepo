@@ -10,8 +10,10 @@ interface RequisitionItem {
   productName: string;
   fullDescription: string;
   quantity: number | '';
+  originalQuantity?: number;
   unitMeasure: string;
   price: number;
+  originalPrice?: number;
   currencyType?: string;
   supplierId?: string;
   supplierName?: string;
@@ -27,6 +29,9 @@ interface RequisitionData {
   needByDate: string;
   comments: string;
   supplierComment?: string;
+  supplierModified?: boolean;
+  buyerModificationStatus?: string;
+  buyerComment?: string;
   cancellationReason?: string;
   status: string;
   createdAt: string;
@@ -36,6 +41,7 @@ interface RequisitionData {
   supplierId?: string;
   supplierEmail?: string;
   supplierName?: string;
+  hasPurchaseReceipt?: boolean;
   items: RequisitionItem[];
 }
 
@@ -60,6 +66,9 @@ interface CatalogueItem {
 const RequisitionPage: React.FC = () => {
   const [requisitions, setRequisitions] = useState<RequisitionData[]>([]);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
+  const [receiptPoIds, setReceiptPoIds] = useState<string[]>([]);
+  const [receiptPoCodes, setReceiptPoCodes] = useState<string[]>([]);
+  const [hoveredCancelReqId, setHoveredCancelReqId] = useState<string | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string>('');
   const [success, setSuccess] = useState<string>('');
@@ -105,12 +114,19 @@ const RequisitionPage: React.FC = () => {
   const [submittingCancellation, setSubmittingCancellation] = useState<boolean>(false);
   const [cancelModalError, setCancelModalError] = useState<string>('');
 
+  // Buyer Modification Review Modal state (e & f)
+  const [reviewingModificationReq, setReviewingModificationReq] = useState<RequisitionData | null>(null);
+  const [buyerModificationMessage, setBuyerModificationMessage] = useState<string>('');
+  const [modificationModalError, setModificationModalError] = useState<string>('');
+  const [submittingModificationDecision, setSubmittingModificationDecision] = useState<boolean>(false);
+
   const location = useLocation();
   const [highlightedReqId, setHighlightedReqId] = useState<string | null>(null);
 
   useEffect(() => {
     fetchRequisitions();
     fetchSuppliers();
+    fetchPurchaseReceipts();
   }, []);
 
   useEffect(() => {
@@ -154,6 +170,224 @@ const RequisitionPage: React.FC = () => {
     } catch (err) {
       console.error('Failed to fetch suppliers', err);
     }
+  };
+
+  const fetchPurchaseReceipts = async () => {
+    try {
+      const res = await api.get('/api/purchase-receipts');
+      if (Array.isArray(res.data)) {
+        const ids = res.data
+          .map((pr: any) => pr.purchaseOrderId)
+          .filter((id: any): id is string => Boolean(id));
+        const codes = res.data
+          .map((pr: any) => pr.purchaseOrderCode)
+          .filter((code: any): code is string => Boolean(code));
+        setReceiptPoIds(ids);
+        setReceiptPoCodes(codes);
+      }
+    } catch (err) {
+      console.error('Failed to fetch purchase receipts', err);
+    }
+  };
+
+  const getPoCode = (req: RequisitionData): string => {
+    if (req.requisitionId && req.requisitionId.toUpperCase().startsWith('PO')) {
+      return req.requisitionId;
+    }
+    const num = req.reqNumber && req.reqNumber > 0 ? req.reqNumber : 1;
+    return `PO${String(num).padStart(2, '0')}`;
+  };
+
+  const hasPurchaseReceiptForPo = (req: RequisitionData): boolean => {
+    const poCode = getPoCode(req);
+    return Boolean(
+      req.hasPurchaseReceipt ||
+      receiptPoIds.includes(req.id) ||
+      (req.requisitionId && receiptPoCodes.includes(req.requisitionId)) ||
+      receiptPoCodes.includes(poCode)
+    );
+  };
+
+  const isProceedInvoiceReady = (req: RequisitionData): boolean => {
+    const isAccepted = req.status === 'Accepted' || req.status === 'PO Accepted';
+    if (!isAccepted) return false;
+    if (!req.supplierModified) return true;
+    return req.buyerModificationStatus === 'APPROVED' || req.buyerModificationStatus === 'PROCEED_INVOICE';
+  };
+
+  const handleOpenModificationReview = (req: RequisitionData) => {
+    setReviewingModificationReq(req);
+    setBuyerModificationMessage('');
+    setModificationModalError('');
+  };
+
+  const handleBuyerModificationAction = async (decision: 'approve' | 'decline') => {
+    if (!reviewingModificationReq) return;
+    const trimmed = buyerModificationMessage.trim();
+    if (!trimmed) {
+      setModificationModalError(
+        `Buyer message is mandatory to ${decision === 'approve' ? 'Approve' : 'Decline'} the Supplier modification.`
+      );
+      return;
+    }
+
+    try {
+      setSubmittingModificationDecision(true);
+      setModificationModalError('');
+      await api.put(`/api/requisitions/${reviewingModificationReq.id}/modification/${decision}`, {
+        comments: trimmed,
+      });
+
+      const poCode = getPoCode(reviewingModificationReq);
+      setSuccess(
+        decision === 'approve'
+          ? `Modification on Purchase Order ${poCode} approved! Proceed Invoice.`
+          : `Modification on Purchase Order ${poCode} declined.`
+      );
+      setReviewingModificationReq(null);
+      setBuyerModificationMessage('');
+      fetchRequisitions();
+    } catch (err: any) {
+      setModificationModalError(
+        err.response?.data?.message || `Failed to ${decision} modification`
+      );
+    } finally {
+      setSubmittingModificationDecision(false);
+    }
+  };
+
+  const renderPurchaseOrderStatusSection = (req: RequisitionData) => {
+    if (req.status === 'PR') return null;
+
+    const isAccepted = req.status === 'Accepted' || req.status === 'PO Accepted';
+    const isDeclined = req.status === 'Declined';
+    const proceedInvoice = isProceedInvoiceReady(req);
+
+    return (
+      <div
+        style={{
+          background: 'var(--bg-primary)',
+          border: '1px solid var(--border-color)',
+          borderLeft: proceedInvoice
+            ? '4px solid #10b981'
+            : req.supplierModified && req.buyerModificationStatus === 'DECLINED'
+              ? '4px solid #ef4444'
+              : req.supplierModified && req.buyerModificationStatus === 'PENDING_BUYER_APPROVAL'
+                ? '4px solid #f59e0b'
+                : '4px solid var(--accent-primary)',
+          borderRadius: '8px',
+          padding: '0.85rem 1rem',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '0.5rem',
+        }}
+      >
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem' }}>
+          <span
+            style={{
+              fontSize: '0.78rem',
+              fontWeight: 700,
+              textTransform: 'uppercase',
+              letterSpacing: '0.5px',
+              color: 'var(--accent-primary)',
+            }}
+          >
+            Purchase Order Status
+          </span>
+
+          {proceedInvoice && (
+            <span
+              style={{
+                background: 'rgba(16, 185, 129, 0.18)',
+                color: '#10b981',
+                border: '1px solid rgba(16, 185, 129, 0.4)',
+                padding: '0.2rem 0.65rem',
+                borderRadius: '6px',
+                fontSize: '0.78rem',
+                fontWeight: 700,
+              }}
+            >
+              Proceed Invoice
+            </span>
+          )}
+
+          {isAccepted && req.supplierModified && req.buyerModificationStatus === 'PENDING_BUYER_APPROVAL' && (
+            <span
+              style={{
+                background: 'rgba(245, 158, 11, 0.18)',
+                color: '#f59e0b',
+                border: '1px solid rgba(245, 158, 11, 0.4)',
+                padding: '0.2rem 0.65rem',
+                borderRadius: '6px',
+                fontSize: '0.78rem',
+                fontWeight: 700,
+              }}
+            >
+              Supplier Modified PO — Pending Buyer Confirmation
+            </span>
+          )}
+
+          {isAccepted && req.supplierModified && req.buyerModificationStatus === 'DECLINED' && (
+            <span
+              style={{
+                background: 'rgba(239, 68, 68, 0.18)',
+                color: '#ef4444',
+                border: '1px solid rgba(239, 68, 68, 0.4)',
+                padding: '0.2rem 0.65rem',
+                borderRadius: '6px',
+                fontSize: '0.78rem',
+                fontWeight: 700,
+              }}
+            >
+              Modification Declined by Buyer
+            </span>
+          )}
+        </div>
+
+        {/* Supplier Message */}
+        {req.supplierComment ? (
+          <div style={{ fontSize: '0.85rem', color: 'var(--text-primary)' }}>
+            <strong style={{ color: isDeclined ? '#ef4444' : '#10b981' }}>
+              {isDeclined
+                ? 'Supplier Declined Message: '
+                : req.supplierModified
+                  ? 'Supplier Approved Message (With Modification): '
+                  : 'Supplier Approved Message: '}
+            </strong>
+            <span>"{req.supplierComment}"</span>
+          </div>
+        ) : (
+          <div style={{ fontSize: '0.82rem', color: 'var(--text-muted)' }}>
+            Awaiting Supplier response on Purchase Order.
+          </div>
+        )}
+
+        {/* Default Proceed Invoice message when Supplier approved without modification */}
+        {isAccepted && !req.supplierModified && (
+          <div style={{ fontSize: '0.85rem', color: 'var(--text-primary)' }}>
+            <strong style={{ color: '#10b981' }}>Status Message: </strong>
+            <span style={{ fontWeight: 600, color: '#10b981' }}>Proceed Invoice</span>
+          </div>
+        )}
+
+        {/* Buyer Approved or Declined Message */}
+        {req.supplierModified && req.buyerComment && (
+          <div style={{ fontSize: '0.85rem', color: 'var(--text-primary)' }}>
+            <strong style={{ color: req.buyerModificationStatus === 'DECLINED' ? '#ef4444' : '#10b981' }}>
+              {req.buyerModificationStatus === 'DECLINED'
+                ? 'Buyer Declined Message: '
+                : 'Buyer Approved Message: '}
+            </strong>
+            <span>"{req.buyerComment}"</span>
+            {req.buyerModificationStatus === 'APPROVED' && (
+              <span style={{ marginLeft: '0.5rem', fontWeight: 700, color: '#10b981' }}>
+                — Proceed Invoice
+              </span>
+            )}
+          </div>
+        )}
+      </div>
+    );
   };
 
   const getCatalogSupplierMismatchMsg = (reqSupId: string, currentModalSupId: string): string => {
@@ -507,6 +741,11 @@ const RequisitionPage: React.FC = () => {
   };
 
   const handleDeleteRequisition = async (id: string, status?: string) => {
+    const reqObj = requisitions.find((r) => r.id === id);
+    if (reqObj && hasPurchaseReceiptForPo(reqObj)) {
+      setError(`Purchase Receipts Exists on ${getPoCode(reqObj)}`);
+      return;
+    }
     if (status === 'PO' || status === 'Accepted' || status === 'PO Accepted') {
       setError('Cannot delete a requisition that has already been converted to Purchase Order (PO).');
       return;
@@ -654,6 +893,10 @@ const RequisitionPage: React.FC = () => {
   };
 
   const handleOpenCancelModal = (req: RequisitionData) => {
+    if (hasPurchaseReceiptForPo(req)) {
+      setError(`Purchase Receipts Exists on ${getPoCode(req)}`);
+      return;
+    }
     setCancellingRequisition(req);
     setCancellationReason('');
     setCancelModalError('');
@@ -680,6 +923,7 @@ const RequisitionPage: React.FC = () => {
       setCancellingRequisition(null);
       setCancellationReason('');
       fetchRequisitions();
+      fetchPurchaseReceipts();
     } catch (err: any) {
       setCancelModalError(err.response?.data?.message || 'Failed to cancel Purchase Order');
     } finally {
@@ -918,120 +1162,249 @@ const RequisitionPage: React.FC = () => {
             </div>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-              {requisitions.map((req) => (
-                <div
-                  key={req.id}
-                  id={`req-${req.id}`}
-                  style={{
-                    background: req.id === highlightedReqId ? 'rgba(59, 130, 246, 0.08)' : 'var(--bg-secondary)',
-                    border: req.id === highlightedReqId ? '2px solid var(--accent-primary)' : '1px solid var(--border-color)',
-                    borderRadius: '12px',
-                    padding: '1.5rem',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    gap: '1rem',
-                    boxShadow: req.id === highlightedReqId ? '0 0 20px rgba(59, 130, 246, 0.35)' : 'var(--shadow-sm)',
-                    transition: 'all 0.3s ease',
-                  }}
-                >
-                  {/* Requisition Header with Requisition ID, Title & Status */}
+              {requisitions.map((req) => {
+                const poCode = getPoCode(req);
+                const hasReceipt = hasPurchaseReceiptForPo(req);
+                const isCancelDisabled = req.status === 'Cancelled' || req.status === 'PR' || hasReceipt;
+                const cancelTooltipMsg = hasReceipt
+                  ? `Purchase Receipts Exists on ${poCode}`
+                  : req.status === 'Cancelled'
+                    ? 'Purchase Order has already been cancelled'
+                    : req.status === 'PR'
+                      ? 'Cannot cancel: Requisition has not been converted to Purchase Order yet'
+                      : 'Cancel Purchase Order';
+
+                return (
                   <div
+                    key={req.id}
+                    id={`req-${req.id}`}
                     style={{
+                      background: req.id === highlightedReqId ? 'rgba(59, 130, 246, 0.08)' : 'var(--bg-secondary)',
+                      border: req.id === highlightedReqId ? '2px solid var(--accent-primary)' : '1px solid var(--border-color)',
+                      borderRadius: '12px',
+                      padding: '1.5rem',
                       display: 'flex',
-                      justifyContent: 'space-between',
-                      alignItems: 'center',
-                      borderBottom: '1px solid var(--border-color)',
-                      paddingBottom: '0.75rem',
-                    }}
-                  >
-                    <div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
-                        <span style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--accent-primary)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                          Requisition Id: {req.requisitionId || (req.status === 'PO' ? 'PO' : 'PR')}
-                        </span>
-                        {req.id === highlightedReqId && (
-                          <span style={{ fontSize: '0.75rem', fontWeight: 700, padding: '0.15rem 0.5rem', borderRadius: '4px', background: 'var(--accent-gradient)', color: '#fff' }}>
-                            Selected Purchase Order
-                          </span>
-                        )}
-                      </div>
-                      <h3 style={{ fontSize: '1.15rem', fontWeight: 700, margin: '0.2rem 0 0 0', color: 'var(--text-primary)' }}>
-                        {req.title}
-                      </h3>
-                    </div>
-                    <div>{getStatusBadge(req.status)}</div>
-                  </div>
-
-                  {/* Requisition Record Fields Grid in a Single Row: a) Ship To b) Deliver To c) Need By Date d) Supplier e) Comments */}
-                  <div
-                    style={{
-                      display: 'grid',
-                      gridTemplateColumns: 'repeat(5, 1fr)',
+                      flexDirection: 'column',
                       gap: '1rem',
-                      fontSize: '0.9rem',
-                      overflowX: 'auto',
+                      boxShadow: req.id === highlightedReqId ? '0 0 20px rgba(59, 130, 246, 0.35)' : 'var(--shadow-sm)',
+                      transition: 'all 0.3s ease',
                     }}
                   >
-                    <div>
-                      <span style={{ color: 'var(--text-muted)', fontSize: '0.8rem', fontWeight: 500, display: 'block', marginBottom: '0.2rem' }}>Ship To</span>
-                      <div style={{ color: 'var(--text-primary)', fontWeight: 500 }}>{req.shipTo}</div>
-                    </div>
-
-                    <div>
-                      <span style={{ color: 'var(--text-muted)', fontSize: '0.8rem', fontWeight: 500, display: 'block', marginBottom: '0.2rem' }}>Deliver To</span>
-                      <div style={{ color: 'var(--text-primary)', fontWeight: 500 }}>{req.deliverTo}</div>
-                    </div>
-
-                    <div>
-                      <span style={{ color: 'var(--text-muted)', fontSize: '0.8rem', fontWeight: 500, display: 'block', marginBottom: '0.2rem' }}>Need By Date</span>
-                      <div style={{ color: 'var(--text-primary)', fontWeight: 500 }}>{req.needByDate}</div>
-                    </div>
-
-                    <div>
-                      <span style={{ color: 'var(--text-muted)', fontSize: '0.8rem', fontWeight: 500, display: 'block', marginBottom: '0.2rem' }}>Supplier</span>
-                      <div style={{ color: 'var(--text-primary)', fontWeight: 500 }}>{req.supplierName || 'Not Assigned'}</div>
-                    </div>
-
-                    <div>
-                      <span style={{ color: 'var(--text-muted)', fontSize: '0.8rem', fontWeight: 500, display: 'block', marginBottom: '0.2rem' }}>Comments</span>
-                      <div style={{ color: 'var(--text-primary)' }}>{req.comments || '-'}</div>
-                    </div>
-                  </div>
-
-                  {req.status === 'Cancelled' && (
+                    {/* Requisition Header with Requisition ID, Title & Status */}
                     <div
                       style={{
-                        background: 'rgba(239, 68, 68, 0.08)',
-                        border: '1px solid rgba(239, 68, 68, 0.3)',
-                        borderRadius: '8px',
-                        padding: '0.75rem 1rem',
-                        fontSize: '0.875rem',
-                        color: '#ef4444',
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        borderBottom: '1px solid var(--border-color)',
+                        paddingBottom: '0.75rem',
                       }}
                     >
-                      <strong style={{ display: 'block', marginBottom: '0.2rem', color: '#dc2626' }}>
-                        Reason for Cancellation:
-                      </strong>
-                      <span>{req.cancellationReason || 'No reason provided'}</span>
+                      <div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+                          <span style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--accent-primary)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                            Requisition Id: {req.requisitionId || (req.status === 'PO' ? 'PO' : 'PR')}
+                          </span>
+                          {req.id === highlightedReqId && (
+                            <span style={{ fontSize: '0.75rem', fontWeight: 700, padding: '0.15rem 0.5rem', borderRadius: '4px', background: 'var(--accent-gradient)', color: '#fff' }}>
+                              Selected Purchase Order
+                            </span>
+                          )}
+                        </div>
+                        <h3 style={{ fontSize: '1.15rem', fontWeight: 700, margin: '0.2rem 0 0 0', color: 'var(--text-primary)' }}>
+                          {req.title}
+                        </h3>
+                      </div>
+                      <div>{getStatusBadge(req.status)}</div>
                     </div>
-                  )}
 
-                  {/* Actions available just below each Submitted Requisition in a single horizontal row with uniform button width: a) Purchase Order b) Edit c) Delete d) View Items e) Copy PO f) Cancel Purchase Order */}
-                  <div
-                    style={{
-                      display: 'flex',
-                      flexDirection: 'row',
-                      flexWrap: 'nowrap',
-                      gap: '0.75rem',
-                      alignItems: 'center',
-                      paddingTop: '0.85rem',
-                      borderTop: '1px solid var(--border-color)',
-                      marginTop: '0.25rem',
-                      overflowX: 'auto',
-                    }}
-                  >
-                    {/* a) Purchase Order */}
-                    {req.status === 'PR' && (
+                    {/* Requisition Record Fields Grid in a Single Row: a) Ship To b) Deliver To c) Need By Date d) Supplier e) Comments */}
+                    <div
+                      style={{
+                        display: 'grid',
+                        gridTemplateColumns: 'repeat(5, 1fr)',
+                        gap: '1rem',
+                        fontSize: '0.9rem',
+                        overflowX: 'auto',
+                      }}
+                    >
+                      <div>
+                        <span style={{ color: 'var(--text-muted)', fontSize: '0.8rem', fontWeight: 500, display: 'block', marginBottom: '0.2rem' }}>Ship To</span>
+                        <div style={{ color: 'var(--text-primary)', fontWeight: 500 }}>{req.shipTo}</div>
+                      </div>
+
+                      <div>
+                        <span style={{ color: 'var(--text-muted)', fontSize: '0.8rem', fontWeight: 500, display: 'block', marginBottom: '0.2rem' }}>Deliver To</span>
+                        <div style={{ color: 'var(--text-primary)', fontWeight: 500 }}>{req.deliverTo}</div>
+                      </div>
+
+                      <div>
+                        <span style={{ color: 'var(--text-muted)', fontSize: '0.8rem', fontWeight: 500, display: 'block', marginBottom: '0.2rem' }}>Need By Date</span>
+                        <div style={{ color: 'var(--text-primary)', fontWeight: 500 }}>{req.needByDate}</div>
+                      </div>
+
+                      <div>
+                        <span style={{ color: 'var(--text-muted)', fontSize: '0.8rem', fontWeight: 500, display: 'block', marginBottom: '0.2rem' }}>Supplier</span>
+                        <div style={{ color: 'var(--text-primary)', fontWeight: 500 }}>{req.supplierName || 'Not Assigned'}</div>
+                      </div>
+
+                      <div>
+                        <span style={{ color: 'var(--text-muted)', fontSize: '0.8rem', fontWeight: 500, display: 'block', marginBottom: '0.2rem' }}>Comments</span>
+                        <div style={{ color: 'var(--text-primary)' }}>{req.comments || '-'}</div>
+                      </div>
+                    </div>
+
+                    {req.status === 'Cancelled' && (
+                      <div
+                        style={{
+                          background: 'rgba(239, 68, 68, 0.08)',
+                          border: '1px solid rgba(239, 68, 68, 0.3)',
+                          borderRadius: '8px',
+                          padding: '0.75rem 1rem',
+                          fontSize: '0.875rem',
+                          color: '#ef4444',
+                        }}
+                      >
+                        <strong style={{ display: 'block', marginBottom: '0.2rem', color: '#dc2626' }}>
+                          Reason for Cancellation:
+                        </strong>
+                        <span>{req.cancellationReason || 'No reason provided'}</span>
+                      </div>
+                    )}
+
+                    {/* g) Purchase Order Status Section */}
+                    {renderPurchaseOrderStatusSection(req)}
+
+                    {/* Actions available just below each Submitted Requisition in a single horizontal row with uniform button width: a) Purchase Order b) Edit c) Delete d) View Items e) Copy PO f) Cancel Purchase Order + Proceed Invoice / Review Modification */}
+                    <div
+                      style={{
+                        display: 'flex',
+                        flexDirection: 'row',
+                        flexWrap: 'nowrap',
+                        gap: '0.75rem',
+                        alignItems: 'center',
+                        paddingTop: '0.85rem',
+                        borderTop: '1px solid var(--border-color)',
+                        marginTop: '0.25rem',
+                        overflowX: 'auto',
+                      }}
+                    >
+                      {/* a) Purchase Order */}
+                      {req.status === 'PR' && (
+                        <button
+                          className="btn"
+                          style={{
+                            width: '140px',
+                            minWidth: '140px',
+                            height: '38px',
+                            display: 'inline-flex',
+                            justifyContent: 'center',
+                            alignItems: 'center',
+                            fontSize: '0.85rem',
+                            background: '#f59e0b',
+                            color: '#fff',
+                            border: 'none',
+                            borderRadius: '6px',
+                            cursor: 'pointer',
+                            fontWeight: 600,
+                            whiteSpace: 'nowrap',
+                            flexShrink: 0,
+                            boxSizing: 'border-box',
+                          }}
+                          onClick={() => handleConvertToPo(req.id)}
+                        >
+                          Purchase Order
+                        </button>
+                      )}
+
+                      {/* b) Edit - Light Blue Color (Disabled once PO accepted by supplier or cancelled with dull/dim appearance) */}
+                      <button
+                        className="btn"
+                        disabled={req.status === 'Accepted' || req.status === 'PO Accepted' || req.status === 'Cancelled'}
+                        style={{
+                          width: '140px',
+                          minWidth: '140px',
+                          height: '38px',
+                          display: 'inline-flex',
+                          justifyContent: 'center',
+                          alignItems: 'center',
+                          fontSize: '0.85rem',
+                          background: '#38bdf8',
+                          color: '#ffffff',
+                          border: 'none',
+                          borderRadius: '6px',
+                          cursor: (req.status === 'Accepted' || req.status === 'PO Accepted' || req.status === 'Cancelled') ? 'not-allowed' : 'pointer',
+                          fontWeight: 600,
+                          whiteSpace: 'nowrap',
+                          flexShrink: 0,
+                          boxSizing: 'border-box',
+                          opacity: (req.status === 'Accepted' || req.status === 'PO Accepted' || req.status === 'Cancelled') ? 0.45 : 1,
+                          filter: (req.status === 'Accepted' || req.status === 'PO Accepted' || req.status === 'Cancelled') ? 'saturate(70%) brightness(0.85)' : 'none',
+                        }}
+                        onClick={() => !(req.status === 'Accepted' || req.status === 'PO Accepted' || req.status === 'Cancelled') && handleStartEdit(req)}
+                        title={
+                          req.status === 'Cancelled'
+                            ? 'Cannot edit: Purchase Order has been cancelled'
+                            : (req.status === 'Accepted' || req.status === 'PO Accepted')
+                              ? 'Cannot edit: Purchase Order has already been accepted by the supplier'
+                              : 'Edit Requisition'
+                        }
+                      >
+                        Edit
+                      </button>
+
+                      {/* c) Delete (Disabled once converted to PO or accepted by supplier or cancelled or when Purchase Receipts exist with dull/dim appearance) */}
+                      <span
+                        style={{ display: 'inline-flex', flexShrink: 0 }}
+                        title={
+                          hasReceipt
+                            ? `Purchase Receipts Exists on ${poCode}`
+                            : req.status === 'Cancelled'
+                              ? 'Cannot delete: Purchase Order has been cancelled'
+                              : (req.status === 'PO' || req.status === 'Accepted' || req.status === 'PO Accepted')
+                                ? 'Cannot delete: Requisition has already been converted to Purchase Order (PO)'
+                                : 'Delete Requisition'
+                        }
+                      >
+                        <button
+                          className="btn"
+                          disabled={req.status === 'PO' || req.status === 'Accepted' || req.status === 'PO Accepted' || req.status === 'Cancelled' || hasReceipt}
+                          style={{
+                            width: '140px',
+                            minWidth: '140px',
+                            height: '38px',
+                            display: 'inline-flex',
+                            justifyContent: 'center',
+                            alignItems: 'center',
+                            fontSize: '0.85rem',
+                            background: '#ef4444',
+                            color: '#ffffff',
+                            border: 'none',
+                            borderRadius: '6px',
+                            cursor: (req.status === 'PO' || req.status === 'Accepted' || req.status === 'PO Accepted' || req.status === 'Cancelled' || hasReceipt) ? 'not-allowed' : 'pointer',
+                            fontWeight: 600,
+                            whiteSpace: 'nowrap',
+                            flexShrink: 0,
+                            boxSizing: 'border-box',
+                            opacity: (req.status === 'PO' || req.status === 'Accepted' || req.status === 'PO Accepted' || req.status === 'Cancelled' || hasReceipt) ? 0.45 : 1,
+                            filter: (req.status === 'PO' || req.status === 'Accepted' || req.status === 'PO Accepted' || req.status === 'Cancelled' || hasReceipt) ? 'saturate(70%) brightness(0.85)' : 'none',
+                          }}
+                          onClick={() => !(req.status === 'PO' || req.status === 'Accepted' || req.status === 'PO Accepted' || req.status === 'Cancelled' || hasReceipt) && handleDeleteRequisition(req.id, req.status)}
+                          title={
+                            hasReceipt
+                              ? `Purchase Receipts Exists on ${poCode}`
+                              : req.status === 'Cancelled'
+                                ? 'Cannot delete: Purchase Order has been cancelled'
+                                : (req.status === 'PO' || req.status === 'Accepted' || req.status === 'PO Accepted')
+                                  ? 'Cannot delete: Requisition has already been converted to Purchase Order (PO)'
+                                  : 'Delete Requisition'
+                          }
+                        >
+                          Delete
+                        </button>
+                      </span>
+
+                      {/* d) View Items - Light Blue Color */}
                       <button
                         className="btn"
                         style={{
@@ -1042,8 +1415,8 @@ const RequisitionPage: React.FC = () => {
                           justifyContent: 'center',
                           alignItems: 'center',
                           fontSize: '0.85rem',
-                          background: '#f59e0b',
-                          color: '#fff',
+                          background: '#38bdf8',
+                          color: '#ffffff',
                           border: 'none',
                           borderRadius: '6px',
                           cursor: 'pointer',
@@ -1052,175 +1425,135 @@ const RequisitionPage: React.FC = () => {
                           flexShrink: 0,
                           boxSizing: 'border-box',
                         }}
-                        onClick={() => handleConvertToPo(req.id)}
+                        onClick={() => setViewingItemsReq(req)}
                       >
-                        Purchase Order
+                        View Items ({req.items?.length || 0})
                       </button>
-                    )}
 
-                    {/* b) Edit - Light Blue Color (Disabled once PO accepted by supplier or cancelled with dull/dim appearance) */}
-                    <button
-                      className="btn"
-                      disabled={req.status === 'Accepted' || req.status === 'PO Accepted' || req.status === 'Cancelled'}
-                      style={{
-                        width: '140px',
-                        minWidth: '140px',
-                        height: '38px',
-                        display: 'inline-flex',
-                        justifyContent: 'center',
-                        alignItems: 'center',
-                        fontSize: '0.85rem',
-                        background: '#38bdf8',
-                        color: '#ffffff',
-                        border: 'none',
-                        borderRadius: '6px',
-                        cursor: (req.status === 'Accepted' || req.status === 'PO Accepted' || req.status === 'Cancelled') ? 'not-allowed' : 'pointer',
-                        fontWeight: 600,
-                        whiteSpace: 'nowrap',
-                        flexShrink: 0,
-                        boxSizing: 'border-box',
-                        opacity: (req.status === 'Accepted' || req.status === 'PO Accepted' || req.status === 'Cancelled') ? 0.45 : 1,
-                        filter: (req.status === 'Accepted' || req.status === 'PO Accepted' || req.status === 'Cancelled') ? 'saturate(70%) brightness(0.85)' : 'none',
-                      }}
-                      onClick={() => !(req.status === 'Accepted' || req.status === 'PO Accepted' || req.status === 'Cancelled') && handleStartEdit(req)}
-                      title={
-                        req.status === 'Cancelled'
-                          ? 'Cannot edit: Purchase Order has been cancelled'
-                          : (req.status === 'Accepted' || req.status === 'PO Accepted')
-                            ? 'Cannot edit: Purchase Order has already been accepted by the supplier'
-                            : 'Edit Requisition'
-                      }
-                    >
-                      Edit
-                    </button>
+                      {/* e) Copy PO - Royal Purple / Violet Color */}
+                      <button
+                        className="btn"
+                        style={{
+                          width: '140px',
+                          minWidth: '140px',
+                          height: '38px',
+                          display: 'inline-flex',
+                          justifyContent: 'center',
+                          alignItems: 'center',
+                          fontSize: '0.85rem',
+                          background: '#8b5cf6',
+                          color: '#ffffff',
+                          border: 'none',
+                          borderRadius: '6px',
+                          cursor: 'pointer',
+                          fontWeight: 600,
+                          whiteSpace: 'nowrap',
+                          flexShrink: 0,
+                          boxSizing: 'border-box',
+                        }}
+                        onClick={() => handleStartCopyPo(req)}
+                        title="Copy this Purchase Order to generate a new PO"
+                      >
+                        Copy PO
+                      </button>
 
-                    {/* c) Delete (Disabled once converted to PO or accepted by supplier or cancelled with dull/dim appearance) */}
-                    <button
-                      className="btn"
-                      disabled={req.status === 'PO' || req.status === 'Accepted' || req.status === 'PO Accepted' || req.status === 'Cancelled'}
-                      style={{
-                        width: '140px',
-                        minWidth: '140px',
-                        height: '38px',
-                        display: 'inline-flex',
-                        justifyContent: 'center',
-                        alignItems: 'center',
-                        fontSize: '0.85rem',
-                        background: '#ef4444',
-                        color: '#ffffff',
-                        border: 'none',
-                        borderRadius: '6px',
-                        cursor: (req.status === 'PO' || req.status === 'Accepted' || req.status === 'PO Accepted' || req.status === 'Cancelled') ? 'not-allowed' : 'pointer',
-                        fontWeight: 600,
-                        whiteSpace: 'nowrap',
-                        flexShrink: 0,
-                        boxSizing: 'border-box',
-                        opacity: (req.status === 'PO' || req.status === 'Accepted' || req.status === 'PO Accepted' || req.status === 'Cancelled') ? 0.45 : 1,
-                        filter: (req.status === 'PO' || req.status === 'Accepted' || req.status === 'PO Accepted' || req.status === 'Cancelled') ? 'saturate(70%) brightness(0.85)' : 'none',
-                      }}
-                      onClick={() => !(req.status === 'PO' || req.status === 'Accepted' || req.status === 'PO Accepted' || req.status === 'Cancelled') && handleDeleteRequisition(req.id, req.status)}
-                      title={
-                        req.status === 'Cancelled'
-                          ? 'Cannot delete: Purchase Order has been cancelled'
-                          : (req.status === 'PO' || req.status === 'Accepted' || req.status === 'PO Accepted')
-                            ? 'Cannot delete: Requisition has already been converted to Purchase Order (PO)'
-                            : 'Delete Requisition'
-                      }
-                    >
-                      Delete
-                    </button>
+                      {/* e) Review Supplier Modification Button */}
 
-                    {/* d) View Items - Light Blue Color */}
-                    <button
-                      className="btn"
-                      style={{
-                        width: '140px',
-                        minWidth: '140px',
-                        height: '38px',
-                        display: 'inline-flex',
-                        justifyContent: 'center',
-                        alignItems: 'center',
-                        fontSize: '0.85rem',
-                        background: '#38bdf8',
-                        color: '#ffffff',
-                        border: 'none',
-                        borderRadius: '6px',
-                        cursor: 'pointer',
-                        fontWeight: 600,
-                        whiteSpace: 'nowrap',
-                        flexShrink: 0,
-                        boxSizing: 'border-box',
-                      }}
-                      onClick={() => setViewingItemsReq(req)}
-                    >
-                      View Items ({req.items?.length || 0})
-                    </button>
+                      {(req.status === 'Accepted' || req.status === 'PO Accepted') &&
+                        req.supplierModified &&
+                        req.buyerModificationStatus === 'PENDING_BUYER_APPROVAL' && (
+                          <button
+                            type="button"
+                            className="btn"
+                            style={{
+                              width: '190px',
+                              minWidth: '190px',
+                              height: '38px',
+                              display: 'inline-flex',
+                              justifyContent: 'center',
+                              alignItems: 'center',
+                              fontSize: '0.85rem',
+                              background: '#f59e0b',
+                              color: '#ffffff',
+                              border: 'none',
+                              borderRadius: '6px',
+                              cursor: 'pointer',
+                              fontWeight: 700,
+                              whiteSpace: 'nowrap',
+                              flexShrink: 0,
+                              boxSizing: 'border-box',
+                            }}
+                            onClick={() => handleOpenModificationReview(req)}
+                            title="Review Original PO vs Supplier Modified PO details to Approve or Decline"
+                          >
+                            Approve / Decline Mod
+                          </button>
+                        )}
 
-                    {/* e) Copy PO - Royal Purple / Violet Color */}
-                    <button
-                      className="btn"
-                      style={{
-                        width: '140px',
-                        minWidth: '140px',
-                        height: '38px',
-                        display: 'inline-flex',
-                        justifyContent: 'center',
-                        alignItems: 'center',
-                        fontSize: '0.85rem',
-                        background: '#8b5cf6',
-                        color: '#ffffff',
-                        border: 'none',
-                        borderRadius: '6px',
-                        cursor: 'pointer',
-                        fontWeight: 600,
-                        whiteSpace: 'nowrap',
-                        flexShrink: 0,
-                        boxSizing: 'border-box',
-                      }}
-                      onClick={() => handleStartCopyPo(req)}
-                      title="Copy this Purchase Order to generate a new PO"
-                    >
-                      Copy PO
-                    </button>
-
-                    {/* f) Cancel Purchase Order */}
-                    <button
-                      className="btn"
-                      disabled={req.status === 'Cancelled' || req.status === 'PR'}
-                      style={{
-                        width: '180px',
-                        minWidth: '180px',
-                        height: '38px',
-                        display: 'inline-flex',
-                        justifyContent: 'center',
-                        alignItems: 'center',
-                        fontSize: '0.85rem',
-                        background: '#dc2626',
-                        color: '#ffffff',
-                        border: 'none',
-                        borderRadius: '6px',
-                        cursor: (req.status === 'Cancelled' || req.status === 'PR') ? 'not-allowed' : 'pointer',
-                        fontWeight: 600,
-                        whiteSpace: 'nowrap',
-                        flexShrink: 0,
-                        boxSizing: 'border-box',
-                        opacity: (req.status === 'Cancelled' || req.status === 'PR') ? 0.45 : 1,
-                        filter: (req.status === 'Cancelled' || req.status === 'PR') ? 'saturate(70%) brightness(0.85)' : 'none',
-                      }}
-                      onClick={() => req.status !== 'Cancelled' && req.status !== 'PR' && handleOpenCancelModal(req)}
-                      title={
-                        req.status === 'Cancelled'
-                          ? 'Purchase Order has already been cancelled'
-                          : req.status === 'PR'
-                            ? 'Cannot cancel: Requisition has not been converted to Purchase Order yet'
-                            : 'Cancel Purchase Order'
-                      }
-                    >
-                      {req.status === 'Cancelled' ? 'Cancelled' : 'Cancel Purchase Order'}
-                    </button>
+                      {/* f) Cancel Purchase Order */}
+                      <span
+                        style={{ position: 'relative', display: 'inline-flex', flexShrink: 0 }}
+                        title={cancelTooltipMsg}
+                        onMouseEnter={() => setHoveredCancelReqId(req.id)}
+                        onMouseLeave={() => setHoveredCancelReqId(null)}
+                      >
+                        {hoveredCancelReqId === req.id && hasReceipt && (
+                          <div
+                            role="tooltip"
+                            style={{
+                              position: 'absolute',
+                              bottom: 'calc(100% + 8px)',
+                              left: '50%',
+                              transform: 'translateX(-50%)',
+                              background: '#1e293b',
+                              color: '#ffffff',
+                              border: '1px solid rgba(239, 68, 68, 0.5)',
+                              padding: '0.4rem 0.75rem',
+                              borderRadius: '6px',
+                              fontSize: '0.78rem',
+                              fontWeight: 600,
+                              whiteSpace: 'nowrap',
+                              zIndex: 100,
+                              boxShadow: '0 4px 12px rgba(0, 0, 0, 0.35)',
+                              pointerEvents: 'none',
+                            }}
+                          >
+                            {`Purchase Receipts Exists on ${poCode}`}
+                          </div>
+                        )}
+                        <button
+                          className="btn"
+                          disabled={isCancelDisabled}
+                          style={{
+                            width: '180px',
+                            minWidth: '180px',
+                            height: '38px',
+                            display: 'inline-flex',
+                            justifyContent: 'center',
+                            alignItems: 'center',
+                            fontSize: '0.85rem',
+                            background: '#dc2626',
+                            color: '#ffffff',
+                            border: 'none',
+                            borderRadius: '6px',
+                            cursor: isCancelDisabled ? 'not-allowed' : 'pointer',
+                            fontWeight: 600,
+                            whiteSpace: 'nowrap',
+                            flexShrink: 0,
+                            boxSizing: 'border-box',
+                            opacity: isCancelDisabled ? 0.45 : 1,
+                            filter: isCancelDisabled ? 'saturate(70%) brightness(0.85)' : 'none',
+                          }}
+                          onClick={() => !isCancelDisabled && handleOpenCancelModal(req)}
+                          title={cancelTooltipMsg}
+                        >
+                          {req.status === 'Cancelled' ? 'Cancelled' : 'Cancel Purchase Order'}
+                        </button>
+                      </span>
+                    </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>
@@ -2015,6 +2348,222 @@ const RequisitionPage: React.FC = () => {
         </div>
       )}
 
+      {/* MODAL: BUYER REVIEW & APPROVE / DECLINE SUPPLIER MODIFICATION (e & f) */}
+      {reviewingModificationReq && (
+        <div className="modal-backdrop" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.65)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1200 }}>
+          <div className="glass-card" style={{ width: '92%', maxWidth: '820px', padding: '2rem', maxHeight: '88vh', overflowY: 'auto' }}>
+            <h3 className="card-title" style={{ marginBottom: '0.4rem', fontSize: '1.35rem' }}>
+              Review Supplier Modified Purchase Order ({getPoCode(reviewingModificationReq)})
+            </h3>
+            <p className="card-subtitle" style={{ marginBottom: '1rem', fontSize: '0.9rem' }}>
+              Title: <strong>{reviewingModificationReq.title}</strong> • Supplier: <strong>{reviewingModificationReq.supplierName || 'Assigned Supplier'}</strong>
+            </p>
+
+            {reviewingModificationReq.supplierComment && (
+              <div style={{ background: 'var(--bg-secondary)', borderLeft: '4px solid #f59e0b', padding: '0.75rem 1rem', borderRadius: '0 8px 8px 0', marginBottom: '1.25rem' }}>
+                <span style={{ fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase', color: '#f59e0b', display: 'block', marginBottom: '0.2rem' }}>
+                  Supplier Approval Message (With Modification)
+                </span>
+                <span style={{ fontSize: '0.9rem', color: 'var(--text-primary)', fontStyle: 'italic' }}>
+                  "{reviewingModificationReq.supplierComment}"
+                </span>
+              </div>
+            )}
+
+            {modificationModalError && (
+              <div className="alert-error" style={{ marginBottom: '1rem' }}>
+                {modificationModalError}
+              </div>
+            )}
+
+            {/* 1. Original PO Details */}
+            <div style={{ marginBottom: '1.25rem' }}>
+              <h4 style={{ fontSize: '0.95rem', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '0.5rem' }}>
+                1. Original PO Details (Submitted by Buyer)
+              </h4>
+              <div style={{ overflowX: 'auto', border: '1px solid var(--border-color)', borderRadius: '8px' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
+                  <thead>
+                    <tr style={{ background: 'var(--bg-secondary)', borderBottom: '1px solid var(--border-color)', textAlign: 'left' }}>
+                      <th style={{ padding: '0.5rem' }}>Type</th>
+                      <th style={{ padding: '0.5rem' }}>Product Name</th>
+                      <th style={{ padding: '0.5rem' }}>Original Qty</th>
+                      <th style={{ padding: '0.5rem' }}>Unit</th>
+                      <th style={{ padding: '0.5rem' }}>Original Price</th>
+                      <th style={{ padding: '0.5rem', textAlign: 'right' }}>Original Total</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(reviewingModificationReq.items || []).map((item, idx) => {
+                      const origQty = item.originalQuantity !== undefined ? Number(item.originalQuantity) : Number(item.quantity);
+                      const origPrice = item.originalPrice !== undefined ? Number(item.originalPrice) : Number(item.price);
+                      const origTotal = origQty * origPrice;
+                      return (
+                        <tr key={idx} style={{ borderBottom: '1px solid var(--border-color)' }}>
+                          <td style={{ padding: '0.5rem' }}>{item.itemType}</td>
+                          <td style={{ padding: '0.5rem', fontWeight: 600 }}>{item.productName}</td>
+                          <td style={{ padding: '0.5rem' }}>{origQty}</td>
+                          <td style={{ padding: '0.5rem' }}>{item.unitMeasure}</td>
+                          <td style={{ padding: '0.5rem' }}>
+                            {item.currencyType ? `${item.currencyType} ` : '$'}{origPrice.toFixed(2)}
+                          </td>
+                          <td style={{ padding: '0.5rem', textAlign: 'right', fontWeight: 600 }}>
+                            {item.currencyType ? `${item.currencyType} ` : '$'}{origTotal.toFixed(2)}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                  <tfoot>
+                    <tr style={{ background: 'var(--bg-secondary)', fontWeight: 700 }}>
+                      <td colSpan={5} style={{ padding: '0.5rem', textAlign: 'right' }}>Original PO Total:</td>
+                      <td style={{ padding: '0.5rem', textAlign: 'right' }}>
+                        ${(reviewingModificationReq.items || []).reduce((sum, i) => {
+                          const q = i.originalQuantity !== undefined ? Number(i.originalQuantity) : Number(i.quantity);
+                          const p = i.originalPrice !== undefined ? Number(i.originalPrice) : Number(i.price);
+                          return sum + q * p;
+                        }, 0).toFixed(2)}
+                      </td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+            </div>
+
+            {/* 2. Modified PO Details by Supplier */}
+            <div style={{ marginBottom: '1.25rem' }}>
+              <h4 style={{ fontSize: '0.95rem', fontWeight: 700, color: '#f59e0b', marginBottom: '0.5rem' }}>
+                2. Modified PO Details by Supplier
+              </h4>
+              <div style={{ overflowX: 'auto', border: '1px solid rgba(245, 158, 11, 0.45)', borderRadius: '8px' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
+                  <thead>
+                    <tr style={{ background: 'rgba(245, 158, 11, 0.1)', borderBottom: '1px solid rgba(245, 158, 11, 0.35)', textAlign: 'left' }}>
+                      <th style={{ padding: '0.5rem' }}>Type</th>
+                      <th style={{ padding: '0.5rem' }}>Product Name</th>
+                      <th style={{ padding: '0.5rem' }}>Modified Qty</th>
+                      <th style={{ padding: '0.5rem' }}>Unit</th>
+                      <th style={{ padding: '0.5rem' }}>Modified Price</th>
+                      <th style={{ padding: '0.5rem', textAlign: 'right' }}>Modified Total</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(reviewingModificationReq.items || []).map((item, idx) => {
+                      const origQty = item.originalQuantity !== undefined ? Number(item.originalQuantity) : Number(item.quantity);
+                      const modQty = Number(item.quantity);
+                      const origPrice = item.originalPrice !== undefined ? Number(item.originalPrice) : Number(item.price);
+                      const modPrice = Number(item.price);
+                      const modTotal = modQty * modPrice;
+                      const qtyDiff = origQty !== modQty;
+                      const priceDiff = Math.abs(origPrice - modPrice) > 0.0001;
+                      return (
+                        <tr key={idx} style={{ borderBottom: '1px solid var(--border-color)' }}>
+                          <td style={{ padding: '0.5rem' }}>{item.itemType}</td>
+                          <td style={{ padding: '0.5rem', fontWeight: 600 }}>{item.productName}</td>
+                          <td style={{ padding: '0.5rem', fontWeight: qtyDiff ? 700 : 400, color: qtyDiff ? '#f59e0b' : 'inherit' }}>
+                            {modQty} {qtyDiff ? `(was ${origQty})` : ''}
+                          </td>
+                          <td style={{ padding: '0.5rem' }}>{item.unitMeasure}</td>
+                          <td style={{ padding: '0.5rem', fontWeight: priceDiff ? 700 : 400, color: priceDiff ? '#f59e0b' : 'inherit' }}>
+                            {item.currencyType ? `${item.currencyType} ` : '$'}{modPrice.toFixed(2)} {priceDiff ? `(was ${origPrice.toFixed(2)})` : ''}
+                          </td>
+                          <td style={{ padding: '0.5rem', textAlign: 'right', fontWeight: 700, color: (qtyDiff || priceDiff) ? '#f59e0b' : 'inherit' }}>
+                            {item.currencyType ? `${item.currencyType} ` : '$'}{modTotal.toFixed(2)}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                  <tfoot>
+                    <tr style={{ background: 'rgba(245, 158, 11, 0.1)', fontWeight: 700 }}>
+                      <td colSpan={5} style={{ padding: '0.5rem', textAlign: 'right' }}>Modified PO Total:</td>
+                      <td style={{ padding: '0.5rem', textAlign: 'right', color: '#f59e0b' }}>
+                        ${(reviewingModificationReq.items || []).reduce((sum, i) => sum + Number(i.quantity || 0) * Number(i.price || 0), 0).toFixed(2)}
+                      </td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+            </div>
+
+            {/* Mandatory Buyer Message */}
+            <div className="form-group" style={{ marginBottom: '1.25rem' }}>
+              <label className="form-label" style={{ fontWeight: 600, display: 'block', marginBottom: '0.4rem' }}>
+                Buyer Message * <span style={{ color: '#ef4444', fontSize: '0.78rem', fontWeight: 400 }}>(Mandatory to Approve or Decline)</span>
+              </label>
+              <textarea
+                className="form-input"
+                style={{
+                  width: '100%',
+                  minHeight: '95px',
+                  padding: '0.75rem',
+                  borderRadius: '8px',
+                  resize: 'vertical',
+                  fontSize: '0.9rem',
+                }}
+                placeholder="Enter mandatory message to Approve or Decline Supplier's modification..."
+                value={buyerModificationMessage}
+                onChange={(e) => {
+                  setBuyerModificationMessage(e.target.value);
+                  setModificationModalError('');
+                }}
+                maxLength={500}
+                required
+              />
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem' }}>
+              <button
+                type="button"
+                className="btn btn-secondary"
+                onClick={() => {
+                  setReviewingModificationReq(null);
+                  setBuyerModificationMessage('');
+                  setModificationModalError('');
+                }}
+                disabled={submittingModificationDecision}
+              >
+                Close
+              </button>
+              <button
+                type="button"
+                className="btn"
+                style={{
+                  background: '#ef4444',
+                  color: '#fff',
+                  fontWeight: 600,
+                  padding: '0.5rem 1.25rem',
+                  borderRadius: '6px',
+                  border: 'none',
+                  cursor: submittingModificationDecision ? 'not-allowed' : 'pointer',
+                }}
+                onClick={() => handleBuyerModificationAction('decline')}
+                disabled={submittingModificationDecision}
+              >
+                {submittingModificationDecision ? 'Submitting...' : 'Decline Modification'}
+              </button>
+              <button
+                type="button"
+                className="btn"
+                style={{
+                  background: '#10b981',
+                  color: '#fff',
+                  fontWeight: 600,
+                  padding: '0.5rem 1.25rem',
+                  borderRadius: '6px',
+                  border: 'none',
+                  cursor: submittingModificationDecision ? 'not-allowed' : 'pointer',
+                }}
+                onClick={() => handleBuyerModificationAction('approve')}
+                disabled={submittingModificationDecision}
+              >
+                {submittingModificationDecision ? 'Submitting...' : 'Approve Modification'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* MODAL: VIEW ITEMS */}
       {viewingItemsReq && (
         <div className="modal-backdrop" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.6)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000 }}>
@@ -2041,16 +2590,9 @@ const RequisitionPage: React.FC = () => {
               </div>
             )}
 
-            {viewingItemsReq.supplierComment && (
-              <div style={{ background: 'var(--bg-secondary)', borderLeft: '4px solid var(--accent-primary)', padding: '0.75rem 1rem', borderRadius: '0 8px 8px 0', marginBottom: '1.25rem' }}>
-                <span style={{ fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase', color: 'var(--accent-primary)', display: 'block', marginBottom: '0.2rem' }}>
-                  Supplier Response Comments / Reason
-                </span>
-                <span style={{ fontSize: '0.875rem', color: 'var(--text-primary)', fontStyle: 'italic' }}>
-                  "{viewingItemsReq.supplierComment}"
-                </span>
-              </div>
-            )}
+            <div style={{ marginBottom: '1.25rem' }}>
+              {renderPurchaseOrderStatusSection(viewingItemsReq)}
+            </div>
 
             {viewingItemsReq.items && viewingItemsReq.items.length > 0 ? (
               <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.9rem', marginBottom: '1.5rem' }}>
@@ -2074,9 +2616,23 @@ const RequisitionPage: React.FC = () => {
                       </td>
                       <td style={{ padding: '0.5rem', fontWeight: 600 }}>{item.productName}</td>
                       <td style={{ padding: '0.5rem' }}>{item.fullDescription}</td>
-                      <td style={{ padding: '0.5rem' }}>{item.quantity}</td>
+                      <td style={{ padding: '0.5rem' }}>
+                        {item.quantity}
+                        {viewingItemsReq.supplierModified && item.originalQuantity !== undefined && item.originalQuantity !== item.quantity && (
+                          <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                            (Orig: {item.originalQuantity})
+                          </div>
+                        )}
+                      </td>
                       <td style={{ padding: '0.5rem' }}>{item.unitMeasure}</td>
-                      <td style={{ padding: '0.5rem' }}>{item.currencyType ? `${item.currencyType} ` : '$'}{item.price}</td>
+                      <td style={{ padding: '0.5rem' }}>
+                        {item.currencyType ? `${item.currencyType} ` : '$'}{item.price}
+                        {viewingItemsReq.supplierModified && item.originalPrice !== undefined && Number(item.originalPrice) !== Number(item.price) && (
+                          <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                            (Orig: {item.currencyType ? `${item.currencyType} ` : '$'}{item.originalPrice})
+                          </div>
+                        )}
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -2085,7 +2641,31 @@ const RequisitionPage: React.FC = () => {
               <div style={{ color: 'var(--text-muted)', padding: '1rem', textAlign: 'center' }}>No items attached to this requisition.</div>
             )}
 
-            <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem' }}>
+              {(viewingItemsReq.status === 'Accepted' || viewingItemsReq.status === 'PO Accepted') &&
+                viewingItemsReq.supplierModified &&
+                viewingItemsReq.buyerModificationStatus === 'PENDING_BUYER_APPROVAL' && (
+                  <button
+                    type="button"
+                    className="btn"
+                    style={{
+                      background: '#f59e0b',
+                      color: '#fff',
+                      fontWeight: 600,
+                      padding: '0.5rem 1.25rem',
+                      borderRadius: '6px',
+                      border: 'none',
+                      cursor: 'pointer',
+                    }}
+                    onClick={() => {
+                      const reqToReview = viewingItemsReq;
+                      setViewingItemsReq(null);
+                      handleOpenModificationReview(reqToReview);
+                    }}
+                  >
+                    Approve / Decline Modification
+                  </button>
+                )}
               <button
                 type="button"
                 className="btn btn-secondary"

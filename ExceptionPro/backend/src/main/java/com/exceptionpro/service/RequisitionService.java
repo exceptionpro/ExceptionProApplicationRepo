@@ -1,5 +1,6 @@
 package com.exceptionpro.service;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -23,6 +24,7 @@ import com.exceptionpro.entity.RequisitionItem;
 import com.exceptionpro.entity.User;
 import com.exceptionpro.repository.BusinessPartnerRequestRepository;
 import com.exceptionpro.repository.CatalogueRepository;
+import com.exceptionpro.repository.PurchaseReceiptRepository;
 import com.exceptionpro.repository.RequisitionRepository;
 import com.exceptionpro.repository.UserRepository;
 
@@ -35,17 +37,20 @@ public class RequisitionService {
     private final CatalogueRepository catalogueRepository;
     private final NotificationService notificationService;
     private final BusinessPartnerRequestRepository businessPartnerRequestRepository;
+    private final PurchaseReceiptRepository purchaseReceiptRepository;
 
     public RequisitionService(RequisitionRepository requisitionRepository,
                               UserRepository userRepository,
                               CatalogueRepository catalogueRepository,
                               NotificationService notificationService,
-                              BusinessPartnerRequestRepository businessPartnerRequestRepository) {
+                              BusinessPartnerRequestRepository businessPartnerRequestRepository,
+                              PurchaseReceiptRepository purchaseReceiptRepository) {
         this.requisitionRepository = requisitionRepository;
         this.userRepository = userRepository;
         this.catalogueRepository = catalogueRepository;
         this.notificationService = notificationService;
         this.businessPartnerRequestRepository = businessPartnerRequestRepository;
+        this.purchaseReceiptRepository = purchaseReceiptRepository;
     }
 
     public RequisitionResponse createRequisition(RequisitionRequest request, String buyerEmail) {
@@ -67,6 +72,7 @@ public class RequisitionService {
         requisition.setNeedByDate(request.getNeedByDate());
         requisition.setComments(request.getComments());
         requisition.setStatus("PR");
+        requisition.setSupplierModified(false);
         requisition.setCreatedAt(LocalDateTime.now());
 
         Integer maxReq = requisitionRepository.findMaxReqNumber();
@@ -88,9 +94,12 @@ public class RequisitionService {
                 item.setCatalogueId(itemDto.getCatalogueId());
                 item.setProductName(itemDto.getProductName());
                 item.setFullDescription(itemDto.getFullDescription());
-                item.setQuantity(itemDto.getQuantity() != null ? itemDto.getQuantity().intValue() : 1);
+                int qty = itemDto.getQuantity() != null ? itemDto.getQuantity().intValue() : 1;
+                item.setQuantity(qty);
+                item.setOriginalQuantity(qty);
                 item.setUnitMeasure(itemDto.getUnitMeasure());
                 item.setPrice(itemDto.getPrice());
+                item.setOriginalPrice(itemDto.getPrice());
                 item.setCurrencyType(itemDto.getCurrencyType() != null && !itemDto.getCurrencyType().isBlank() ? itemDto.getCurrencyType().trim() : "USD");
 
                 if (itemDto.getSupplierId() != null) {
@@ -158,9 +167,12 @@ public class RequisitionService {
                 item.setCatalogueId(itemDto.getCatalogueId());
                 item.setProductName(itemDto.getProductName());
                 item.setFullDescription(itemDto.getFullDescription());
-                item.setQuantity(itemDto.getQuantity() != null ? itemDto.getQuantity().intValue() : 1);
+                int qty = itemDto.getQuantity() != null ? itemDto.getQuantity().intValue() : 1;
+                item.setQuantity(qty);
+                item.setOriginalQuantity(qty);
                 item.setUnitMeasure(itemDto.getUnitMeasure());
                 item.setPrice(itemDto.getPrice());
+                item.setOriginalPrice(itemDto.getPrice());
                 item.setCurrencyType(itemDto.getCurrencyType() != null && !itemDto.getCurrencyType().isBlank() ? itemDto.getCurrencyType().trim() : "USD");
 
                 if (itemDto.getSupplierId() != null) {
@@ -189,6 +201,12 @@ public class RequisitionService {
             throw new IllegalArgumentException("You can only delete your own requisitions");
         }
 
+        int reqNum = (requisition.getReqNumber() != null) ? requisition.getReqNumber() : 1;
+        String poCode = String.format("PO%02d", reqNum);
+        if (purchaseReceiptRepository.existsByPurchaseOrderId(requisition.getId())) {
+            throw new IllegalArgumentException("Purchase Receipts Exists on " + poCode);
+        }
+
         if ("PO".equalsIgnoreCase(requisition.getStatus()) || "PO Accepted".equalsIgnoreCase(requisition.getStatus()) || "Accepted".equalsIgnoreCase(requisition.getStatus())) {
             throw new IllegalArgumentException("Cannot delete a requisition that has already been converted to Purchase Order (PO)");
         }
@@ -208,6 +226,16 @@ public class RequisitionService {
         }
 
         requisition.setStatus("PO");
+        if (requisition.getItems() != null) {
+            for (RequisitionItem item : requisition.getItems()) {
+                if (item.getOriginalQuantity() == null) {
+                    item.setOriginalQuantity(item.getQuantity());
+                }
+                if (item.getOriginalPrice() == null) {
+                    item.setOriginalPrice(item.getPrice());
+                }
+            }
+        }
         Requisition saved = requisitionRepository.save(requisition);
 
         sendPoNotificationsToSuppliers(saved, buyer);
@@ -251,6 +279,7 @@ public class RequisitionService {
         newPo.setNeedByDate(request != null && request.getNeedByDate() != null ? request.getNeedByDate() : source.getNeedByDate());
         newPo.setComments(request != null && request.getComments() != null ? request.getComments().trim() : source.getComments());
         newPo.setStatus("PO"); // Directly created as a new PO
+        newPo.setSupplierModified(false);
         newPo.setCreatedAt(LocalDateTime.now());
 
         Integer maxReq = requisitionRepository.findMaxReqNumber();
@@ -275,9 +304,12 @@ public class RequisitionService {
                 item.setCatalogueId(itemDto.getCatalogueId());
                 item.setProductName(itemDto.getProductName());
                 item.setFullDescription(itemDto.getFullDescription());
-                item.setQuantity(itemDto.getQuantity() != null ? itemDto.getQuantity().intValue() : 1);
+                int qty = itemDto.getQuantity() != null ? itemDto.getQuantity().intValue() : 1;
+                item.setQuantity(qty);
+                item.setOriginalQuantity(qty);
                 item.setUnitMeasure(itemDto.getUnitMeasure());
                 item.setPrice(itemDto.getPrice());
+                item.setOriginalPrice(itemDto.getPrice());
                 item.setCurrencyType(itemDto.getCurrencyType() != null && !itemDto.getCurrencyType().isBlank() ? itemDto.getCurrencyType().trim() : "USD");
 
                 if (itemDto.getSupplierId() != null) {
@@ -300,9 +332,12 @@ public class RequisitionService {
                 item.setCatalogueId(sourceItem.getCatalogueId());
                 item.setProductName(sourceItem.getProductName());
                 item.setFullDescription(sourceItem.getFullDescription());
-                item.setQuantity(sourceItem.getQuantity() != null ? sourceItem.getQuantity() : 1);
+                int qty = sourceItem.getQuantity() != null ? sourceItem.getQuantity() : 1;
+                item.setQuantity(qty);
+                item.setOriginalQuantity(qty);
                 item.setUnitMeasure(sourceItem.getUnitMeasure());
                 item.setPrice(sourceItem.getPrice());
+                item.setOriginalPrice(sourceItem.getPrice());
                 item.setCurrencyType(sourceItem.getCurrencyType());
                 item.setSupplier(sourceItem.getSupplier() != null ? sourceItem.getSupplier() : newPo.getSupplier());
                 itemEntities.add(item);
@@ -400,6 +435,13 @@ public class RequisitionService {
             throw new IllegalArgumentException("You can only cancel your own Purchase Orders");
         }
 
+        int reqNum = (requisition.getReqNumber() != null) ? requisition.getReqNumber() : 1;
+        String poCode = String.format("PO%02d", reqNum);
+
+        if (purchaseReceiptRepository.existsByPurchaseOrderId(requisition.getId())) {
+            throw new IllegalArgumentException("Purchase Receipts Exists on " + poCode);
+        }
+
         if ("Cancelled".equalsIgnoreCase(requisition.getStatus())) {
             throw new IllegalArgumentException("This Purchase Order is already cancelled");
         }
@@ -427,8 +469,6 @@ public class RequisitionService {
             }
         }
 
-        int reqNum = (saved.getReqNumber() != null) ? saved.getReqNumber() : 1;
-        String poCode = String.format("PO%02d", reqNum);
         String buyerName = getUserDisplayName(buyer);
 
         for (User targetSupplier : targetSuppliers) {
@@ -449,6 +489,10 @@ public class RequisitionService {
     }
 
     public RequisitionResponse acceptRequisition(UUID id, String supplierComment, String supplierEmail) {
+        return acceptRequisition(id, supplierComment, null, supplierEmail);
+    }
+
+    public RequisitionResponse acceptRequisition(UUID id, String supplierComment, List<RequisitionItemDto> modifiedItems, String supplierEmail) {
         if (supplierComment == null || supplierComment.trim().isEmpty()) {
             throw new IllegalArgumentException("Comments are required when accepting a purchase request");
         }
@@ -467,17 +511,185 @@ public class RequisitionService {
             throw new IllegalArgumentException("You are not assigned as the supplier for this requisition");
         }
 
+        boolean anyItemModified = false;
+        List<RequisitionItem> currentItems = requisition.getItems();
+        if (currentItems != null && !currentItems.isEmpty()) {
+            for (int idx = 0; idx < currentItems.size(); idx++) {
+                RequisitionItem entityItem = currentItems.get(idx);
+                if (entityItem.getOriginalQuantity() == null) {
+                    entityItem.setOriginalQuantity(entityItem.getQuantity());
+                }
+                if (entityItem.getOriginalPrice() == null) {
+                    entityItem.setOriginalPrice(entityItem.getPrice());
+                }
+
+                if (modifiedItems != null && !modifiedItems.isEmpty()) {
+                    RequisitionItemDto dtoMatch = null;
+                    if (entityItem.getId() != null) {
+                        for (RequisitionItemDto dto : modifiedItems) {
+                            if (dto.getId() != null && dto.getId().equals(entityItem.getId())) {
+                                dtoMatch = dto;
+                                break;
+                            }
+                        }
+                    }
+                    if (dtoMatch == null && idx < modifiedItems.size()) {
+                        dtoMatch = modifiedItems.get(idx);
+                    }
+
+                    if (dtoMatch != null) {
+                        if (dtoMatch.getQuantity() != null) {
+                            if (dtoMatch.getQuantity() <= 0) {
+                                throw new IllegalArgumentException("Quantity must be greater than 0 for item: " + entityItem.getProductName());
+                            }
+                            entityItem.setQuantity(dtoMatch.getQuantity());
+                        }
+                        // Only NON_CATALOG items allow price modification by Supplier; CATALOG items only allow Quantity modification
+                        if (!"CATALOG".equalsIgnoreCase(entityItem.getItemType()) && dtoMatch.getPrice() != null) {
+                            if (dtoMatch.getPrice().compareTo(BigDecimal.ZERO) < 0) {
+                                throw new IllegalArgumentException("Price cannot be negative for item: " + entityItem.getProductName());
+                            }
+                            entityItem.setPrice(dtoMatch.getPrice());
+                        } else if ("CATALOG".equalsIgnoreCase(entityItem.getItemType())) {
+                            entityItem.setPrice(entityItem.getOriginalPrice());
+                        }
+                    }
+                }
+
+                Integer origQty = entityItem.getOriginalQuantity();
+                Integer currQty = entityItem.getQuantity();
+                if (origQty != null && currQty != null && !origQty.equals(currQty)) {
+                    anyItemModified = true;
+                }
+                BigDecimal origPrice = entityItem.getOriginalPrice();
+                BigDecimal currPrice = entityItem.getPrice();
+                if (!"CATALOG".equalsIgnoreCase(entityItem.getItemType())
+                        && origPrice != null && currPrice != null
+                        && origPrice.compareTo(currPrice) != 0) {
+                    anyItemModified = true;
+                }
+            }
+        }
+
         requisition.setStatus("PO Accepted");
-        if (supplierComment.length() > 400) {
-            requisition.setSupplierComment(supplierComment.substring(0, 400));
+        String trimmedComment = supplierComment.trim();
+        if (trimmedComment.length() > 400) {
+            requisition.setSupplierComment(trimmedComment.substring(0, 400));
         } else {
-            requisition.setSupplierComment(supplierComment);
+            requisition.setSupplierComment(trimmedComment);
+        }
+
+        if (anyItemModified) {
+            requisition.setSupplierModified(true);
+            requisition.setBuyerModificationStatus("PENDING_BUYER_APPROVAL");
+            requisition.setBuyerComment(null);
+        } else {
+            requisition.setSupplierModified(false);
+            requisition.setBuyerModificationStatus("PROCEED_INVOICE");
         }
 
         Requisition saved = requisitionRepository.save(requisition);
 
         // Send Notification to Buyer
         notificationService.sendOrUpdateBuyerPurchaseOrderNotification(saved, supplier, "PO Accepted");
+
+        return mapToResponse(saved);
+    }
+
+    public RequisitionResponse approveSupplierModification(UUID id, String buyerComment, String buyerEmail) {
+        if (buyerComment == null || buyerComment.trim().isEmpty()) {
+            throw new IllegalArgumentException("Buyer message is mandatory to approve the modification");
+        }
+
+        User buyer = userRepository.findByEmail(buyerEmail)
+                .orElseThrow(() -> new IllegalArgumentException("User not found"));
+
+        Requisition requisition = requisitionRepository.findById(Objects.requireNonNull(id))
+                .orElseThrow(() -> new IllegalArgumentException("Purchase Order not found"));
+
+        if (!requisition.getBuyer().getId().equals(buyer.getId())) {
+            throw new IllegalArgumentException("You can only approve modifications on your own Purchase Orders");
+        }
+
+        if (!Boolean.TRUE.equals(requisition.getSupplierModified())) {
+            throw new IllegalArgumentException("This Purchase Order was not modified by the Supplier");
+        }
+
+        String trimmed = buyerComment.trim();
+        if (trimmed.length() > 500) {
+            trimmed = trimmed.substring(0, 500);
+        }
+
+        requisition.setBuyerModificationStatus("APPROVED");
+        requisition.setBuyerComment(trimmed);
+
+        Requisition saved = requisitionRepository.save(requisition);
+
+        if (saved.getSupplier() != null) {
+            int reqNum = (saved.getReqNumber() != null) ? saved.getReqNumber() : 1;
+            String poCode = String.format("PO%02d", reqNum);
+            String buyerName = getUserDisplayName(buyer);
+            String msg = "Buyer " + buyerName + " approved your modification on Purchase Order " + poCode + ". Proceed Invoice. Buyer Message: " + trimmed;
+            notificationService.createNotification(
+                    saved.getSupplier(),
+                    buyer,
+                    "REQUISITIONS",
+                    "PO Modification Approved - Proceed Invoice (" + poCode + ")",
+                    msg,
+                    trimmed,
+                    saved.getId(),
+                    "REQUISITION"
+            );
+        }
+
+        return mapToResponse(saved);
+    }
+
+    public RequisitionResponse declineSupplierModification(UUID id, String buyerComment, String buyerEmail) {
+        if (buyerComment == null || buyerComment.trim().isEmpty()) {
+            throw new IllegalArgumentException("Buyer message is mandatory to decline the modification");
+        }
+
+        User buyer = userRepository.findByEmail(buyerEmail)
+                .orElseThrow(() -> new IllegalArgumentException("User not found"));
+
+        Requisition requisition = requisitionRepository.findById(Objects.requireNonNull(id))
+                .orElseThrow(() -> new IllegalArgumentException("Purchase Order not found"));
+
+        if (!requisition.getBuyer().getId().equals(buyer.getId())) {
+            throw new IllegalArgumentException("You can only decline modifications on your own Purchase Orders");
+        }
+
+        if (!Boolean.TRUE.equals(requisition.getSupplierModified())) {
+            throw new IllegalArgumentException("This Purchase Order was not modified by the Supplier");
+        }
+
+        String trimmed = buyerComment.trim();
+        if (trimmed.length() > 500) {
+            trimmed = trimmed.substring(0, 500);
+        }
+
+        requisition.setBuyerModificationStatus("DECLINED");
+        requisition.setBuyerComment(trimmed);
+
+        Requisition saved = requisitionRepository.save(requisition);
+
+        if (saved.getSupplier() != null) {
+            int reqNum = (saved.getReqNumber() != null) ? saved.getReqNumber() : 1;
+            String poCode = String.format("PO%02d", reqNum);
+            String buyerName = getUserDisplayName(buyer);
+            String msg = "Buyer " + buyerName + " declined your modification on Purchase Order " + poCode + ". Buyer Message: " + trimmed;
+            notificationService.createNotification(
+                    saved.getSupplier(),
+                    buyer,
+                    "REQUISITIONS",
+                    "PO Modification Declined (" + poCode + ")",
+                    msg,
+                    trimmed,
+                    saved.getId(),
+                    "REQUISITION"
+            );
+        }
 
         return mapToResponse(saved);
     }
@@ -588,19 +800,24 @@ public class RequisitionService {
 
     private RequisitionResponse mapToResponse(Requisition r) {
         List<RequisitionItemDto> itemDtos = r.getItems().stream()
-                .map(item -> new RequisitionItemDto(
-                        item.getId(),
-                        item.getItemType(),
-                        item.getCatalogueId(),
-                        item.getProductName(),
-                        item.getFullDescription(),
-                        item.getQuantity(),
-                        item.getUnitMeasure(),
-                        item.getPrice(),
-                        item.getCurrencyType() != null ? item.getCurrencyType() : "USD",
-                        item.getSupplier() != null ? item.getSupplier().getId() : null,
-                        item.getSupplier() != null ? getUserDisplayName(item.getSupplier()) : null
-                ))
+                .map(item -> {
+                    RequisitionItemDto dto = new RequisitionItemDto(
+                            item.getId(),
+                            item.getItemType(),
+                            item.getCatalogueId(),
+                            item.getProductName(),
+                            item.getFullDescription(),
+                            item.getQuantity(),
+                            item.getUnitMeasure(),
+                            item.getPrice(),
+                            item.getCurrencyType() != null ? item.getCurrencyType() : "USD",
+                            item.getSupplier() != null ? item.getSupplier().getId() : null,
+                            item.getSupplier() != null ? getUserDisplayName(item.getSupplier()) : null
+                    );
+                    dto.setOriginalQuantity(item.getOriginalQuantity() != null ? item.getOriginalQuantity() : item.getQuantity());
+                    dto.setOriginalPrice(item.getOriginalPrice() != null ? item.getOriginalPrice() : item.getPrice());
+                    return dto;
+                })
                 .collect(Collectors.toList());
 
         int reqNum = (r.getReqNumber() != null) ? r.getReqNumber().intValue() : 1;
@@ -608,7 +825,7 @@ public class RequisitionService {
         String prefix = ("PO".equalsIgnoreCase(status) || "Accepted".equalsIgnoreCase(status) || "PO Accepted".equalsIgnoreCase(status) || "Declined".equalsIgnoreCase(status) || "Cancelled".equalsIgnoreCase(status)) ? "PO" : "PR";
         String requisitionId = String.format("%s%02d", prefix, reqNum);
 
-        return new RequisitionResponse(
+        RequisitionResponse response = new RequisitionResponse(
                 r.getId(),
                 requisitionId,
                 reqNum,
@@ -629,6 +846,16 @@ public class RequisitionService {
                 r.getSupplier() != null ? getUserDisplayName(r.getSupplier()) : null,
                 itemDtos
         );
+        boolean isMod = Boolean.TRUE.equals(r.getSupplierModified());
+        response.setSupplierModified(isMod);
+        String modStatus = r.getBuyerModificationStatus();
+        if (modStatus == null && !isMod && ("Accepted".equalsIgnoreCase(status) || "PO Accepted".equalsIgnoreCase(status))) {
+            modStatus = "PROCEED_INVOICE";
+        }
+        response.setBuyerModificationStatus(modStatus);
+        response.setBuyerComment(r.getBuyerComment());
+        response.setHasPurchaseReceipt(r.getId() != null && purchaseReceiptRepository.existsByPurchaseOrderId(r.getId()));
+        return response;
     }
 
     private String getUserDisplayName(User u) {

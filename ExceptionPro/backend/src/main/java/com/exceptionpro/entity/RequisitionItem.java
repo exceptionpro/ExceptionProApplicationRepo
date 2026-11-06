@@ -37,11 +37,17 @@ public class RequisitionItem {
     @Column(nullable = false)
     private Integer quantity;
 
+    @Column(name = "original_quantity")
+    private Integer originalQuantity;
+
     @Column(name = "unit_measure")
     private String unitMeasure;
 
     @Column(nullable = false)
     private BigDecimal price;
+
+    @Column(name = "original_price")
+    private BigDecimal originalPrice;
 
     @Column(name = "currency_type")
     private String currencyType = "USD";
@@ -106,6 +112,14 @@ public class RequisitionItem {
         this.quantity = quantity;
     }
 
+    public Integer getOriginalQuantity() {
+        return originalQuantity;
+    }
+
+    public void setOriginalQuantity(Integer originalQuantity) {
+        this.originalQuantity = originalQuantity;
+    }
+
     public String getUnitMeasure() {
         return unitMeasure;
     }
@@ -120,6 +134,14 @@ public class RequisitionItem {
 
     public void setPrice(BigDecimal price) {
         this.price = price;
+    }
+
+    public BigDecimal getOriginalPrice() {
+        return originalPrice;
+    }
+
+    public void setOriginalPrice(BigDecimal originalPrice) {
+        this.originalPrice = originalPrice;
     }
 
     public String getCurrencyType() {

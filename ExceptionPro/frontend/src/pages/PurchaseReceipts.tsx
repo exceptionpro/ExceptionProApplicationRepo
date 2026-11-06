@@ -212,7 +212,7 @@ const PurchaseReceipts: React.FC = () => {
   };
 
   const handleSupplierApproval = async (status: string = 'Approved') => {
-    if (!viewingReceipt) return;
+    if (!viewingReceipt || viewingReceipt.supplierApprovalStatus === 'Approved') return;
     setApproving(true);
     setApprovalError('');
     setApprovalSuccess('');
@@ -241,57 +241,132 @@ const PurchaseReceipts: React.FC = () => {
     }
   };
 
+  const hasInvoiceForPo = (poId: string): boolean => {
+    if (!poId) return false;
+    const matchedPo = purchaseOrders.find((p) => String(p.id) === String(poId));
+    const matchedInvoice = invoices.find((inv) => inv.purchaseOrderId && String(inv.purchaseOrderId) === String(poId));
+    return Boolean(matchedInvoice || (matchedPo && (matchedPo.invoiceId || matchedPo.invoiceNumber)));
+  };
+
+  const getExistingReceiptForPo = (poId: string): PurchaseReceipt | undefined => {
+    if (!poId) return undefined;
+    const matchedPo = purchaseOrders.find((p) => String(p.id) === String(poId));
+    return receipts.find(
+      (r) =>
+        (r.purchaseOrderId && String(r.purchaseOrderId) === String(poId)) ||
+        (matchedPo?.code && r.purchaseOrderCode && r.purchaseOrderCode === matchedPo.code)
+    );
+  };
+
+  const existingReceiptForSelectedPo = getExistingReceiptForPo(selectedPoId);
+  const isReadOnlyReceiptMode = Boolean(existingReceiptForSelectedPo);
+
   // When PO changes in Create Form
   const handlePoChange = (poId: string) => {
+    // Expected Result (a): Clear previous error/success messages and refresh Create New Purchase Receipt section
     setSelectedPoId(poId);
-    if (poId) {
-      const matchedPo = purchaseOrders.find((p) => p.id === poId);
-      if (matchedPo && matchedPo.supplierId) {
-        setSelectedSupplierId(matchedPo.supplierId);
-      }
+    setError('');
+    setSuccess('');
 
-      // Expected Result: The Currency Type must be same as Purchase Order Price Currency Type
-      const poCurrency = (matchedPo && matchedPo.currencyType) ? matchedPo.currencyType : 'USD';
-      setCurrencyType(poCurrency);
-
-      // Populate Invoice Number and Invoice Amount from matching invoice or PO
-      const matchedInvoice = invoices.find((inv) => inv.purchaseOrderId === poId);
-      if (matchedInvoice) {
-        setSelectedInvoiceId(matchedInvoice.id);
-        setInvoiceNumber(matchedInvoice.invoiceNumber || '');
-        setInvoiceAmount(matchedInvoice.totalAmount !== undefined && matchedInvoice.totalAmount !== null ? matchedInvoice.totalAmount : '');
-      } else if (matchedPo && matchedPo.invoiceNumber) {
-        setSelectedInvoiceId(matchedPo.invoiceId || '');
-        setInvoiceNumber(matchedPo.invoiceNumber || '');
-        setInvoiceAmount(matchedPo.invoiceAmount !== undefined && matchedPo.invoiceAmount !== null ? matchedPo.invoiceAmount : '');
-      } else {
-        setSelectedInvoiceId('');
-        setInvoiceNumber('');
-        setInvoiceAmount(matchedPo && matchedPo.totalAmount !== undefined && matchedPo.totalAmount !== null ? matchedPo.totalAmount : '');
-      }
-
-      // Auto populate PO Quantity based on selection of PO from Drop down Purchase Order
-      const poQty = matchedPo && matchedPo.poQuantity !== undefined ? matchedPo.poQuantity : '';
-      setPoQuantity(poQty);
-
-      if (poQty !== '' && receivedQuantity !== '') {
-        const pending = Math.max(0, Number(poQty) - Number(receivedQuantity));
-        setPendingQuantity(pending);
-        setReceivedStatus(pending === 0 ? 'Fully Received' : 'Partial Received');
-      } else if (receivedQuantity !== '') {
-        setPendingQuantity('');
-      }
-    } else {
+    if (!poId) {
+      const nextNum = (receipts.length + 1).toString().padStart(3, '0');
+      setReceiptNumberSuffix(nextNum);
+      setReceiptDate(new Date().toISOString().split('T')[0]);
+      setSelectedSupplierId('');
       setSelectedInvoiceId('');
       setInvoiceNumber('');
       setInvoiceAmount('');
       setCurrencyType('');
       setPoQuantity('');
+      setReceivedQuantity('');
       setPendingQuantity('');
+      setReceivedStatus('Fully Received');
+      return;
     }
+
+    const matchedPo = purchaseOrders.find((p) => String(p.id) === String(poId));
+    const matchedInvoice = invoices.find((inv) => inv.purchaseOrderId && String(inv.purchaseOrderId) === String(poId));
+    const existingReceipt = getExistingReceiptForPo(poId);
+
+    // Expected Result (b): If Receipt is already created for this Purchase Order, populate and display all details in read-only mode
+    if (existingReceipt) {
+      const match = existingReceipt.receiptNo.match(/REC\s*-\s*(.*)/i);
+      const suffix = match ? match[1].trim() : existingReceipt.receiptNo.replace(/\D/g, '');
+      setReceiptNumberSuffix(suffix || '001');
+      setReceiptDate(existingReceipt.receiptDate || new Date().toISOString().split('T')[0]);
+      setSelectedSupplierId(existingReceipt.receivedFromSupplierId || matchedPo?.supplierId || '');
+      setSelectedInvoiceId(existingReceipt.invoiceId || matchedInvoice?.id || matchedPo?.invoiceId || '');
+      setInvoiceNumber(existingReceipt.invoiceNumber || matchedInvoice?.invoiceNumber || matchedPo?.invoiceNumber || '');
+      setInvoiceAmount(
+        existingReceipt.invoiceAmount !== undefined && existingReceipt.invoiceAmount !== null
+          ? existingReceipt.invoiceAmount
+          : matchedInvoice?.totalAmount !== undefined && matchedInvoice?.totalAmount !== null
+            ? matchedInvoice.totalAmount
+            : matchedPo?.invoiceAmount !== undefined && matchedPo?.invoiceAmount !== null
+              ? matchedPo.invoiceAmount
+              : ''
+      );
+      setCurrencyType(existingReceipt.currencyType || matchedPo?.currencyType || 'USD');
+
+      const recQty =
+        existingReceipt.receivedQuantity !== undefined && existingReceipt.receivedQuantity !== null
+          ? existingReceipt.receivedQuantity
+          : existingReceipt.quantity;
+      const poQty =
+        existingReceipt.poQuantity !== undefined && existingReceipt.poQuantity !== null
+          ? existingReceipt.poQuantity
+          : matchedPo?.poQuantity !== undefined
+            ? matchedPo.poQuantity
+            : recQty;
+      const pendQty =
+        existingReceipt.pendingQuantity !== undefined && existingReceipt.pendingQuantity !== null
+          ? existingReceipt.pendingQuantity
+          : poQty !== '' && recQty !== ''
+            ? Math.max(0, Number(poQty) - Number(recQty))
+            : 0;
+
+      setPoQuantity(poQty);
+      setReceivedQuantity(recQty);
+      setPendingQuantity(pendQty);
+      setReceivedStatus(existingReceipt.receivedStatus || (Number(pendQty) === 0 ? 'Fully Received' : 'Partial Received'));
+      return;
+    }
+
+    // Fresh Create Mode for selected Purchase Order (no receipt created yet)
+    const nextNum = (receipts.length + 1).toString().padStart(3, '0');
+    setReceiptNumberSuffix(nextNum);
+    setReceiptDate(new Date().toISOString().split('T')[0]);
+    setSelectedSupplierId(matchedPo?.supplierId || '');
+
+    // Expected Result: The Currency Type must be same as Purchase Order Price Currency Type
+    const poCurrency = matchedPo && matchedPo.currencyType ? matchedPo.currencyType : 'USD';
+    setCurrencyType(poCurrency);
+
+    // Populate Invoice Number and Invoice Amount from matching invoice or PO
+    if (matchedInvoice) {
+      setSelectedInvoiceId(matchedInvoice.id);
+      setInvoiceNumber(matchedInvoice.invoiceNumber || '');
+      setInvoiceAmount(matchedInvoice.totalAmount !== undefined && matchedInvoice.totalAmount !== null ? matchedInvoice.totalAmount : '');
+    } else if (matchedPo && (matchedPo.invoiceId || matchedPo.invoiceNumber)) {
+      setSelectedInvoiceId(matchedPo.invoiceId || '');
+      setInvoiceNumber(matchedPo.invoiceNumber || '');
+      setInvoiceAmount(matchedPo.invoiceAmount !== undefined && matchedPo.invoiceAmount !== null ? matchedPo.invoiceAmount : '');
+    } else {
+      setSelectedInvoiceId('');
+      setInvoiceNumber('');
+      setInvoiceAmount('');
+    }
+
+    // Auto populate PO Quantity based on selection of PO from Drop down Purchase Order
+    const poQty = matchedPo && matchedPo.poQuantity !== undefined ? matchedPo.poQuantity : '';
+    setPoQuantity(poQty);
+    setReceivedQuantity('');
+    setPendingQuantity('');
+    setReceivedStatus('Fully Received');
   };
 
   const handleReceivedQuantityChange = (val: string) => {
+    if (isReadOnlyReceiptMode) return;
     if (val === '') {
       setReceivedQuantity('');
       setPendingQuantity('');
@@ -311,6 +386,7 @@ const PurchaseReceipts: React.FC = () => {
   };
 
   const handlePoQuantityChange = (val: string) => {
+    if (isReadOnlyReceiptMode) return;
     if (val === '') {
       setPoQuantity('');
       setPendingQuantity('');
@@ -332,6 +408,7 @@ const PurchaseReceipts: React.FC = () => {
   // When PO changes in Edit Form
   const handleEditPoChange = (poId: string) => {
     setEditPoId(poId);
+    setError('');
     if (poId) {
       const matchedPo = purchaseOrders.find((p) => p.id === poId);
       if (matchedPo && matchedPo.supplierId) {
@@ -346,14 +423,14 @@ const PurchaseReceipts: React.FC = () => {
         setEditInvoiceId(matchedInvoice.id);
         setEditInvoiceNumber(matchedInvoice.invoiceNumber || '');
         setEditInvoiceAmount(matchedInvoice.totalAmount !== undefined && matchedInvoice.totalAmount !== null ? matchedInvoice.totalAmount : '');
-      } else if (matchedPo && matchedPo.invoiceNumber) {
+      } else if (matchedPo && (matchedPo.invoiceId || matchedPo.invoiceNumber)) {
         setEditInvoiceId(matchedPo.invoiceId || '');
         setEditInvoiceNumber(matchedPo.invoiceNumber || '');
         setEditInvoiceAmount(matchedPo.invoiceAmount !== undefined && matchedPo.invoiceAmount !== null ? matchedPo.invoiceAmount : '');
       } else {
         setEditInvoiceId('');
         setEditInvoiceNumber('');
-        setEditInvoiceAmount(matchedPo && matchedPo.totalAmount !== undefined && matchedPo.totalAmount !== null ? matchedPo.totalAmount : '');
+        setEditInvoiceAmount('');
       }
 
       if (matchedPo && matchedPo.poQuantity !== undefined) {
@@ -413,6 +490,7 @@ const PurchaseReceipts: React.FC = () => {
   };
 
   const handleSuffixChange = (val: string, isEdit = false) => {
+    if (!isEdit && isReadOnlyReceiptMode) return;
     // Only allow digits
     const cleaned = val.replace(/\D/g, '');
     if (isEdit) {
@@ -445,8 +523,27 @@ const PurchaseReceipts: React.FC = () => {
     setError('');
     setSuccess('');
 
+    if (isReadOnlyReceiptMode) {
+      return;
+    }
+
+    if (selectedPoId && !hasInvoiceForPo(selectedPoId)) {
+      setError('Invoice does not exist, Invoice should be created by the Supplier');
+      return;
+    }
+
     if (!receiptNumberSuffix.trim()) {
       setError('Please enter a Receipt Number.');
+      return;
+    }
+
+    if (!receiptDate) {
+      setError('Please select a Receipt Date.');
+      return;
+    }
+
+    if (!selectedPoId) {
+      setError('Please select a Purchase Order.');
       return;
     }
 
@@ -455,35 +552,66 @@ const PurchaseReceipts: React.FC = () => {
       return;
     }
 
-    if (receivedQuantity === '' || Number(receivedQuantity) <= 0) {
+    if (!invoiceNumber.trim()) {
+      setError('Invoice Number is required.');
+      return;
+    }
+
+    if (invoiceAmount === '' || isNaN(Number(invoiceAmount)) || Number(invoiceAmount) < 0) {
+      setError('Invoice Amount is required.');
+      return;
+    }
+
+    if (!currencyType.trim()) {
+      setError('Currency Type is required.');
+      return;
+    }
+
+    if (poQuantity === '' || isNaN(Number(poQuantity)) || Number(poQuantity) <= 0) {
+      setError('PO Quantity is required and must be greater than 0.');
+      return;
+    }
+
+    if (receivedQuantity === '' || isNaN(Number(receivedQuantity)) || Number(receivedQuantity) <= 0) {
       setError('Received Quantity must be greater than 0.');
+      return;
+    }
+
+    if (pendingQuantity === '' || isNaN(Number(pendingQuantity)) || Number(pendingQuantity) < 0) {
+      setError('Pending Quantity is required.');
+      return;
+    }
+
+    if (!receivedStatus.trim()) {
+      setError('Received status is required.');
       return;
     }
 
     setSubmitting(true);
     try {
-      const effectivePoQty = poQuantity !== '' ? Number(poQuantity) : Number(receivedQuantity);
-      const effectivePending = pendingQuantity !== '' ? Number(pendingQuantity) : Math.max(0, effectivePoQty - Number(receivedQuantity));
+      const effectivePoQty = Number(poQuantity);
+      const effectivePending = Number(pendingQuantity);
 
       const payload = {
         receiptNo: `REC - ${receiptNumberSuffix.trim()}`,
         receiptDate,
-        purchaseOrderId: selectedPoId || null,
+        purchaseOrderId: selectedPoId,
         receivedFromSupplierId: selectedSupplierId,
         invoiceId: selectedInvoiceId || null,
-        invoiceNumber: invoiceNumber.trim() || null,
-        invoiceAmount: invoiceAmount !== '' ? Number(invoiceAmount) : null,
-        currencyType: currencyType || null,
+        invoiceNumber: invoiceNumber.trim(),
+        invoiceAmount: Number(invoiceAmount),
+        currencyType: currencyType.trim(),
         quantity: Number(receivedQuantity),
         receivedQuantity: Number(receivedQuantity),
         poQuantity: effectivePoQty,
         pendingQuantity: effectivePending,
-        receivedStatus
+        receivedStatus: receivedStatus.trim()
       };
 
       const res = await api.post('/api/purchase-receipts', payload);
-      setSuccess(`Purchase Receipt ${res.data.receiptNo} created successfully!`);
+      const createdReceiptNo = res.data.receiptNo;
       handleCancelCreate();
+      setSuccess(`Purchase Receipt ${createdReceiptNo} created successfully!`);
       await loadData();
     } catch (err: any) {
       console.error('Error creating purchase receipt:', err);
@@ -525,6 +653,11 @@ const PurchaseReceipts: React.FC = () => {
   const handleUpdateReceipt = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingReceipt) return;
+
+    if (editPoId && !hasInvoiceForPo(editPoId)) {
+      setError('Invoice does not exist, Invoice should be created by the Supplier');
+      return;
+    }
 
     if (!editReceiptNumberSuffix.trim()) {
       setError('Please enter a Receipt Number.');
@@ -582,7 +715,6 @@ const PurchaseReceipts: React.FC = () => {
       <LeftNavigation activePage="purchase-receipts" />
 
       <main style={{ flex: 1, minWidth: 0 }}>
-        {/* Page Header */}
         {/* Page Header */}
         <div className="glass-card" style={{ padding: '1.5rem', marginBottom: '1.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div>
@@ -674,6 +806,7 @@ const PurchaseReceipts: React.FC = () => {
                       type="text"
                       value={receiptNumberSuffix}
                       onChange={(e) => handleSuffixChange(e.target.value)}
+                      readOnly={isReadOnlyReceiptMode}
                       placeholder="001"
                       pattern="[0-9]*"
                       style={{
@@ -681,10 +814,11 @@ const PurchaseReceipts: React.FC = () => {
                         padding: '0.65rem 0.85rem',
                         borderRadius: '0 8px 8px 0',
                         border: '1px solid var(--border-color)',
-                        background: 'var(--input-bg)',
+                        background: isReadOnlyReceiptMode ? 'rgba(255, 255, 255, 0.05)' : 'var(--input-bg)',
                         color: 'var(--text-primary)',
                         fontSize: '0.9rem',
-                        outline: 'none'
+                        outline: 'none',
+                        cursor: isReadOnlyReceiptMode ? 'not-allowed' : 'text'
                       }}
                       required
                     />
@@ -702,16 +836,20 @@ const PurchaseReceipts: React.FC = () => {
                   <input
                     type="date"
                     value={receiptDate}
-                    onChange={(e) => setReceiptDate(e.target.value)}
+                    onChange={(e) => {
+                      if (!isReadOnlyReceiptMode) setReceiptDate(e.target.value);
+                    }}
+                    readOnly={isReadOnlyReceiptMode}
                     style={{
                       width: '100%',
                       padding: '0.65rem 0.85rem',
                       borderRadius: '8px',
                       border: '1px solid var(--border-color)',
-                      background: 'var(--input-bg)',
+                      background: isReadOnlyReceiptMode ? 'rgba(255, 255, 255, 0.05)' : 'var(--input-bg)',
                       color: 'var(--text-primary)',
                       fontSize: '0.9rem',
-                      outline: 'none'
+                      outline: 'none',
+                      cursor: isReadOnlyReceiptMode ? 'not-allowed' : 'text'
                     }}
                     required
                   />
@@ -720,7 +858,7 @@ const PurchaseReceipts: React.FC = () => {
                 {/* Purchase Order Dropdown */}
                 <div>
                   <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-primary)' }}>
-                    Purchase Order
+                    Purchase Order <span style={{ color: 'var(--danger-color)' }}>*</span>
                   </label>
                   <select
                     value={selectedPoId}
@@ -735,8 +873,9 @@ const PurchaseReceipts: React.FC = () => {
                       fontSize: '0.9rem',
                       outline: 'none'
                     }}
+                    required
                   >
-                    <option value="">-- Select Purchase Order (Optional) --</option>
+                    <option value="">-- Select Purchase Order --</option>
                     {purchaseOrders.map((po) => (
                       <option key={po.id} value={po.id}>
                         {po.code} - {po.title} ({po.status})
@@ -755,16 +894,20 @@ const PurchaseReceipts: React.FC = () => {
                   </label>
                   <select
                     value={selectedSupplierId}
-                    onChange={(e) => setSelectedSupplierId(e.target.value)}
+                    onChange={(e) => {
+                      if (!isReadOnlyReceiptMode) setSelectedSupplierId(e.target.value);
+                    }}
+                    disabled={isReadOnlyReceiptMode}
                     style={{
                       width: '100%',
                       padding: '0.65rem 0.85rem',
                       borderRadius: '8px',
                       border: '1px solid var(--border-color)',
-                      background: 'var(--input-bg)',
+                      background: isReadOnlyReceiptMode ? 'rgba(255, 255, 255, 0.05)' : 'var(--input-bg)',
                       color: 'var(--text-primary)',
                       fontSize: '0.9rem',
-                      outline: 'none'
+                      outline: 'none',
+                      cursor: isReadOnlyReceiptMode ? 'not-allowed' : 'pointer'
                     }}
                     required
                   >
@@ -783,23 +926,28 @@ const PurchaseReceipts: React.FC = () => {
                 {/* Invoice Number */}
                 <div>
                   <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-primary)' }}>
-                    Invoice Number
+                    Invoice Number <span style={{ color: 'var(--danger-color)' }}>*</span>
                   </label>
                   <input
                     type="text"
                     value={invoiceNumber}
-                    onChange={(e) => setInvoiceNumber(e.target.value)}
+                    onChange={(e) => {
+                      if (!isReadOnlyReceiptMode) setInvoiceNumber(e.target.value);
+                    }}
+                    readOnly={isReadOnlyReceiptMode}
                     placeholder="Auto-populated from Purchase Order"
                     style={{
                       width: '100%',
                       padding: '0.65rem 0.85rem',
                       borderRadius: '8px',
                       border: '1px solid var(--border-color)',
-                      background: 'var(--input-bg)',
+                      background: isReadOnlyReceiptMode ? 'rgba(255, 255, 255, 0.05)' : 'var(--input-bg)',
                       color: 'var(--text-primary)',
                       fontSize: '0.9rem',
-                      outline: 'none'
+                      outline: 'none',
+                      cursor: isReadOnlyReceiptMode ? 'not-allowed' : 'text'
                     }}
+                    required
                   />
                   <small style={{ color: 'var(--text-secondary)', fontSize: '0.75rem' }}>
                     Invoice number linked to selected Purchase Order.
@@ -809,25 +957,30 @@ const PurchaseReceipts: React.FC = () => {
                 {/* Invoice Amount */}
                 <div>
                   <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-primary)' }}>
-                    Invoice Amount
+                    Invoice Amount <span style={{ color: 'var(--danger-color)' }}>*</span>
                   </label>
                   <input
                     type="number"
                     step="0.01"
                     min="0"
                     value={invoiceAmount}
-                    onChange={(e) => setInvoiceAmount(e.target.value === '' ? '' : Number(e.target.value))}
+                    onChange={(e) => {
+                      if (!isReadOnlyReceiptMode) setInvoiceAmount(e.target.value === '' ? '' : Number(e.target.value));
+                    }}
+                    readOnly={isReadOnlyReceiptMode}
                     placeholder="Auto-populated from Purchase Order"
                     style={{
                       width: '100%',
                       padding: '0.65rem 0.85rem',
                       borderRadius: '8px',
                       border: '1px solid var(--border-color)',
-                      background: 'var(--input-bg)',
+                      background: isReadOnlyReceiptMode ? 'rgba(255, 255, 255, 0.05)' : 'var(--input-bg)',
                       color: 'var(--text-primary)',
                       fontSize: '0.9rem',
-                      outline: 'none'
+                      outline: 'none',
+                      cursor: isReadOnlyReceiptMode ? 'not-allowed' : 'text'
                     }}
+                    required
                   />
                   <small style={{ color: 'var(--text-secondary)', fontSize: '0.75rem' }}>
                     Invoice amount for selected Purchase Order.
@@ -837,7 +990,7 @@ const PurchaseReceipts: React.FC = () => {
                 {/* Currency Type */}
                 <div>
                   <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-primary)' }}>
-                    Currency Type
+                    Currency Type <span style={{ color: 'var(--danger-color)' }}>*</span>
                   </label>
                   <input
                     type="text"
@@ -855,6 +1008,7 @@ const PurchaseReceipts: React.FC = () => {
                       outline: 'none',
                       cursor: 'not-allowed'
                     }}
+                    required
                   />
                   <small style={{ color: 'var(--text-secondary)', fontSize: '0.75rem' }}>
                     Same as Purchase Order Price Currency Type.
@@ -864,24 +1018,27 @@ const PurchaseReceipts: React.FC = () => {
                 {/* PO Quantity */}
                 <div>
                   <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-primary)' }}>
-                    PO Quantity
+                    PO Quantity <span style={{ color: 'var(--danger-color)' }}>*</span>
                   </label>
                   <input
                     type="number"
-                    min="0"
+                    min="1"
                     value={poQuantity}
                     onChange={(e) => handlePoQuantityChange(e.target.value)}
+                    readOnly={isReadOnlyReceiptMode}
                     placeholder="Auto-populated from PO"
                     style={{
                       width: '100%',
                       padding: '0.65rem 0.85rem',
                       borderRadius: '8px',
                       border: '1px solid var(--border-color)',
-                      background: 'var(--input-bg)',
+                      background: isReadOnlyReceiptMode ? 'rgba(255, 255, 255, 0.05)' : 'var(--input-bg)',
                       color: 'var(--text-primary)',
                       fontSize: '0.9rem',
-                      outline: 'none'
+                      outline: 'none',
+                      cursor: isReadOnlyReceiptMode ? 'not-allowed' : 'text'
                     }}
+                    required
                   />
                   <small style={{ color: 'var(--text-secondary)', fontSize: '0.75rem' }}>
                     Populated from selected Purchase Order.
@@ -898,16 +1055,18 @@ const PurchaseReceipts: React.FC = () => {
                     min="1"
                     value={receivedQuantity}
                     onChange={(e) => handleReceivedQuantityChange(e.target.value)}
+                    readOnly={isReadOnlyReceiptMode}
                     placeholder="Enter received quantity"
                     style={{
                       width: '100%',
                       padding: '0.65rem 0.85rem',
                       borderRadius: '8px',
                       border: '1px solid var(--border-color)',
-                      background: 'var(--input-bg)',
+                      background: isReadOnlyReceiptMode ? 'rgba(255, 255, 255, 0.05)' : 'var(--input-bg)',
                       color: 'var(--text-primary)',
                       fontSize: '0.9rem',
-                      outline: 'none'
+                      outline: 'none',
+                      cursor: isReadOnlyReceiptMode ? 'not-allowed' : 'text'
                     }}
                     required
                   />
@@ -916,7 +1075,7 @@ const PurchaseReceipts: React.FC = () => {
                 {/* Pending Quantity */}
                 <div>
                   <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-primary)' }}>
-                    Pending Quantity <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', fontWeight: 400 }}>(Read-only)</span>
+                    Pending Quantity <span style={{ color: 'var(--danger-color)' }}>*</span> <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', fontWeight: 400 }}>(Read-only)</span>
                   </label>
                   <input
                     type="number"
@@ -935,6 +1094,7 @@ const PurchaseReceipts: React.FC = () => {
                       outline: 'none',
                       cursor: 'not-allowed'
                     }}
+                    required
                   />
                   <small style={{ color: 'var(--text-secondary)', fontSize: '0.75rem' }}>
                     Auto-calculated as PO Quantity - Received Quantity.
@@ -948,16 +1108,20 @@ const PurchaseReceipts: React.FC = () => {
                   </label>
                   <select
                     value={receivedStatus}
-                    onChange={(e) => setReceivedStatus(e.target.value)}
+                    onChange={(e) => {
+                      if (!isReadOnlyReceiptMode) setReceivedStatus(e.target.value);
+                    }}
+                    disabled={isReadOnlyReceiptMode}
                     style={{
                       width: '100%',
                       padding: '0.65rem 0.85rem',
                       borderRadius: '8px',
                       border: '1px solid var(--border-color)',
-                      background: 'var(--input-bg)',
+                      background: isReadOnlyReceiptMode ? 'rgba(255, 255, 255, 0.05)' : 'var(--input-bg)',
                       color: 'var(--text-primary)',
                       fontSize: '0.9rem',
-                      outline: 'none'
+                      outline: 'none',
+                      cursor: isReadOnlyReceiptMode ? 'not-allowed' : 'pointer'
                     }}
                     required
                   >
@@ -980,9 +1144,19 @@ const PurchaseReceipts: React.FC = () => {
                 </button>
                 <button
                   type="submit"
-                  disabled={submitting}
+                  disabled={submitting || isReadOnlyReceiptMode}
+                  onClick={(e) => {
+                    if (isReadOnlyReceiptMode) {
+                      e.preventDefault();
+                      return;
+                    }
+                    if (selectedPoId && !hasInvoiceForPo(selectedPoId)) {
+                      e.preventDefault();
+                      setError('Invoice does not exist, Invoice should be created by the Supplier');
+                    }
+                  }}
                   className="btn btn-primary"
-                  style={{ minWidth: '150px' }}
+                  style={{ minWidth: '150px', opacity: isReadOnlyReceiptMode ? 0.6 : 1, cursor: isReadOnlyReceiptMode ? 'not-allowed' : 'pointer' }}
                 >
                   {submitting ? 'Creating...' : 'Create Receipt'}
                 </button>
@@ -2058,16 +2232,17 @@ const PurchaseReceipts: React.FC = () => {
                   <button
                     type="button"
                     onClick={() => handleSupplierApproval('Approved')}
-                    disabled={approving}
+                    disabled={approving || viewingReceipt.supplierApprovalStatus === 'Approved'}
                     style={{
-                      background: '#16a34a',
+                      background: viewingReceipt.supplierApprovalStatus === 'Approved' ? '#94a3b8' : '#16a34a',
                       color: '#ffffff',
                       border: 'none',
                       borderRadius: '6px',
                       padding: '0.6rem 1.4rem',
                       fontWeight: 700,
                       fontSize: '0.9rem',
-                      cursor: 'pointer',
+                      cursor: approving || viewingReceipt.supplierApprovalStatus === 'Approved' ? 'not-allowed' : 'pointer',
+                      opacity: viewingReceipt.supplierApprovalStatus === 'Approved' ? 0.6 : 1,
                       boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
                     }}
                   >

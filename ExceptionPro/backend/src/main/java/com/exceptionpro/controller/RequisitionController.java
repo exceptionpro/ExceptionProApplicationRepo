@@ -16,6 +16,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.exceptionpro.dto.CatalogueResponse;
+import com.exceptionpro.dto.RequisitionItemDto;
 import com.exceptionpro.dto.RequisitionRequest;
 import com.exceptionpro.dto.RequisitionResponse;
 import com.exceptionpro.dto.SupplierActionRequest;
@@ -144,7 +145,8 @@ public class RequisitionController {
         }
         try {
             String comments = request != null ? request.getComments() : null;
-            RequisitionResponse response = requisitionService.acceptRequisition(id, comments, principal.getName());
+            List<RequisitionItemDto> modifiedItems = request != null ? request.getItems() : null;
+            RequisitionResponse response = requisitionService.acceptRequisition(id, comments, modifiedItems, principal.getName());
             return ResponseEntity.ok(response);
         } catch (IllegalArgumentException e) {
             return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
@@ -159,6 +161,34 @@ public class RequisitionController {
         try {
             String comments = request != null ? request.getComments() : null;
             RequisitionResponse response = requisitionService.declineRequisition(id, comments, principal.getName());
+            return ResponseEntity.ok(response);
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
+        }
+    }
+
+    @PutMapping("/{id}/modification/approve")
+    public ResponseEntity<?> approveSupplierModification(Principal principal, @PathVariable UUID id, @RequestBody(required = false) SupplierActionRequest request) {
+        if (principal == null) {
+            return ResponseEntity.status(401).body(Map.of("message", "Unauthorized"));
+        }
+        try {
+            String comments = request != null ? request.getComments() : null;
+            RequisitionResponse response = requisitionService.approveSupplierModification(id, comments, principal.getName());
+            return ResponseEntity.ok(response);
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
+        }
+    }
+
+    @PutMapping("/{id}/modification/decline")
+    public ResponseEntity<?> declineSupplierModification(Principal principal, @PathVariable UUID id, @RequestBody(required = false) SupplierActionRequest request) {
+        if (principal == null) {
+            return ResponseEntity.status(401).body(Map.of("message", "Unauthorized"));
+        }
+        try {
+            String comments = request != null ? request.getComments() : null;
+            RequisitionResponse response = requisitionService.declineSupplierModification(id, comments, principal.getName());
             return ResponseEntity.ok(response);
         } catch (IllegalArgumentException e) {
             return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));

@@ -10,8 +10,10 @@ public class RequisitionItemDto {
     private String productName;
     private String fullDescription;
     private Integer quantity;
+    private Integer originalQuantity;
     private String unitMeasure;
     private BigDecimal price;
+    private BigDecimal originalPrice;
     private String currencyType;
     private UUID supplierId;
     private String supplierName;
@@ -33,8 +35,10 @@ public class RequisitionItemDto {
         this.productName = productName;
         this.fullDescription = fullDescription;
         this.quantity = quantity;
+        this.originalQuantity = quantity;
         this.unitMeasure = unitMeasure;
         this.price = price;
+        this.originalPrice = price;
         this.currencyType = currencyType != null ? currencyType : "USD";
         this.supplierId = supplierId;
         this.supplierName = supplierName;
@@ -88,6 +92,14 @@ public class RequisitionItemDto {
         this.quantity = quantity;
     }
 
+    public Integer getOriginalQuantity() {
+        return originalQuantity;
+    }
+
+    public void setOriginalQuantity(Integer originalQuantity) {
+        this.originalQuantity = originalQuantity;
+    }
+
     public String getUnitMeasure() {
         return unitMeasure;
     }
@@ -102,6 +114,14 @@ public class RequisitionItemDto {
 
     public void setPrice(BigDecimal price) {
         this.price = price;
+    }
+
+    public BigDecimal getOriginalPrice() {
+        return originalPrice;
+    }
+
+    public void setOriginalPrice(BigDecimal originalPrice) {
+        this.originalPrice = originalPrice;
     }
 
     public String getCurrencyType() {

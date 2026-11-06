@@ -49,6 +49,15 @@ public class Requisition {
     @Column(name = "supplier_comment", length = 400)
     private String supplierComment;
 
+    @Column(name = "supplier_modified")
+    private Boolean supplierModified = false;
+
+    @Column(name = "buyer_modification_status", length = 50)
+    private String buyerModificationStatus;
+
+    @Column(name = "buyer_comment", length = 500)
+    private String buyerComment;
+
     @Column(name = "cancellation_reason", length = 500)
     private String cancellationReason;
 
@@ -137,6 +146,30 @@ public class Requisition {
 
     public void setSupplierComment(String supplierComment) {
         this.supplierComment = supplierComment;
+    }
+
+    public Boolean getSupplierModified() {
+        return supplierModified;
+    }
+
+    public void setSupplierModified(Boolean supplierModified) {
+        this.supplierModified = supplierModified;
+    }
+
+    public String getBuyerModificationStatus() {
+        return buyerModificationStatus;
+    }
+
+    public void setBuyerModificationStatus(String buyerModificationStatus) {
+        this.buyerModificationStatus = buyerModificationStatus;
+    }
+
+    public String getBuyerComment() {
+        return buyerComment;
+    }
+
+    public void setBuyerComment(String buyerComment) {
+        this.buyerComment = buyerComment;
     }
 
     public String getStatus() {

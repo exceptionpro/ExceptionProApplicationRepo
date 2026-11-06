@@ -65,13 +65,19 @@ public class PurchaseReceiptService {
             throw new IllegalArgumentException("Receipt Date is required");
         }
 
-        Integer receivedQty = request.getReceivedQuantity() != null ? request.getReceivedQuantity() : request.getQuantity();
-        if (receivedQty == null || receivedQty <= 0) {
-            throw new IllegalArgumentException("Received quantity must be greater than 0");
+        if (request.getPurchaseOrderId() == null) {
+            throw new IllegalArgumentException("Purchase Order is required");
         }
 
-        if (request.getReceivedStatus() == null || request.getReceivedStatus().trim().isEmpty()) {
-            throw new IllegalArgumentException("Received status is required");
+        Requisition po = requisitionRepository.findById(Objects.requireNonNull(request.getPurchaseOrderId()))
+                .orElseThrow(() -> new IllegalArgumentException("Purchase Order not found"));
+
+        List<Invoice> poInvoices = invoiceRepository.findByBuyerIdOrderByCreatedAtDesc(buyer.getId()).stream()
+                .filter(inv -> inv.getRequisition() != null && inv.getRequisition().getId().equals(po.getId()))
+                .collect(Collectors.toList());
+
+        if (poInvoices.isEmpty()) {
+            throw new IllegalArgumentException("Invoice does not exist, Invoice should be created by the Supplier");
         }
 
         if (request.getReceivedFromSupplierId() == null) {
@@ -81,34 +87,48 @@ public class PurchaseReceiptService {
         User supplier = userRepository.findById(Objects.requireNonNull(request.getReceivedFromSupplierId()))
                 .orElseThrow(() -> new IllegalArgumentException("Supplier not found"));
 
-        Requisition po = null;
-        if (request.getPurchaseOrderId() != null) {
-            po = requisitionRepository.findById(Objects.requireNonNull(request.getPurchaseOrderId()))
-                    .orElseThrow(() -> new IllegalArgumentException("Purchase Order not found"));
-        }
-
-        Invoice invoice = null;
+        Invoice invoice;
         if (request.getInvoiceId() != null) {
             invoice = invoiceRepository.findById(Objects.requireNonNull(request.getInvoiceId()))
-                    .orElseThrow(() -> new IllegalArgumentException("Invoice not found"));
+                    .orElseThrow(() -> new IllegalArgumentException("Invoice does not exist, Invoice should be created by the Supplier"));
+            if (invoice.getRequisition() == null || !invoice.getRequisition().getId().equals(po.getId())) {
+                throw new IllegalArgumentException("Invoice does not exist, Invoice should be created by the Supplier");
+            }
+        } else {
+            invoice = poInvoices.get(0);
+        }
+
+        if (request.getInvoiceNumber() == null || request.getInvoiceNumber().trim().isEmpty()) {
+            throw new IllegalArgumentException("Invoice Number is required");
+        }
+
+        if (request.getInvoiceAmount() == null) {
+            throw new IllegalArgumentException("Invoice Amount is required");
+        }
+
+        if (request.getCurrencyType() == null || request.getCurrencyType().trim().isEmpty()) {
+            throw new IllegalArgumentException("Currency Type is required");
+        }
+
+        if (request.getPoQuantity() == null || request.getPoQuantity() <= 0) {
+            throw new IllegalArgumentException("PO Quantity is required");
+        }
+
+        Integer receivedQty = request.getReceivedQuantity() != null ? request.getReceivedQuantity() : request.getQuantity();
+        if (receivedQty == null || receivedQty <= 0) {
+            throw new IllegalArgumentException("Received quantity must be greater than 0");
+        }
+
+        if (request.getPendingQuantity() == null || request.getPendingQuantity() < 0) {
+            throw new IllegalArgumentException("Pending Quantity is required");
+        }
+
+        if (request.getReceivedStatus() == null || request.getReceivedStatus().trim().isEmpty()) {
+            throw new IllegalArgumentException("Received status is required");
         }
 
         Integer poQty = request.getPoQuantity();
-        if (poQty == null && po != null) {
-            try {
-                if (po.getItems() != null) {
-                    poQty = po.getItems().stream().mapToInt(i -> i.getQuantity() != null ? i.getQuantity() : 0).sum();
-                }
-            } catch (Exception ignored) {}
-        }
-        if (poQty == null) {
-            poQty = receivedQty;
-        }
-
         Integer pendingQty = request.getPendingQuantity();
-        if (pendingQty == null) {
-            pendingQty = Math.max(0, poQty - receivedQty);
-        }
 
         PurchaseReceipt receipt = new PurchaseReceipt();
         receipt.setId(UUID.randomUUID());
@@ -179,6 +199,12 @@ public class PurchaseReceiptService {
         if (request.getPurchaseOrderId() != null) {
             Requisition po = requisitionRepository.findById(Objects.requireNonNull(request.getPurchaseOrderId()))
                     .orElseThrow(() -> new IllegalArgumentException("Purchase Order not found"));
+            List<Invoice> poInvoices = invoiceRepository.findByBuyerIdOrderByCreatedAtDesc(buyer.getId()).stream()
+                    .filter(inv -> inv.getRequisition() != null && inv.getRequisition().getId().equals(po.getId()))
+                    .collect(Collectors.toList());
+            if (poInvoices.isEmpty()) {
+                throw new IllegalArgumentException("Invoice does not exist, Invoice should be created by the Supplier");
+            }
             receipt.setPurchaseOrder(po);
         } else {
             receipt.setPurchaseOrder(null);
@@ -186,11 +212,15 @@ public class PurchaseReceiptService {
 
         if (request.getInvoiceId() != null) {
             Invoice invoice = invoiceRepository.findById(Objects.requireNonNull(request.getInvoiceId()))
-                    .orElseThrow(() -> new IllegalArgumentException("Invoice not found"));
+                    .orElseThrow(() -> new IllegalArgumentException("Invoice does not exist, Invoice should be created by the Supplier"));
             receipt.setInvoice(invoice);
         } else {
             receipt.setInvoice(null);
         }
+
+        // Re-enable Supplier approval when Buyer modifies the Purchase Receipt
+        receipt.setSupplierApprovalStatus("Pending Approval");
+        receipt.setSupplierApprovedAt(null);
 
         receipt.setUpdatedAt(LocalDateTime.now());
         PurchaseReceipt updated = purchaseReceiptRepository.save(receipt);

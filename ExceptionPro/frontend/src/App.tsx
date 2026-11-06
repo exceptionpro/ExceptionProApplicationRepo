@@ -17,6 +17,7 @@ import CollaborationRequestNotification from './pages/CollaborationRequestNotifi
 import Notifications from './pages/Notifications';
 import Invoices from './pages/Invoices';
 import PurchaseReceipts from './pages/PurchaseReceipts';
+import ReplacementRequests from './pages/ReplacementRequests';
 import Reconciliation from './pages/Reconciliation';
 import Payments from './pages/Payments';
 import BuyerDashboard from './pages/BuyerDashboard';
@@ -121,6 +122,30 @@ const AppContent: React.FC = () => {
         <Route path="/purchase-receipts" element={
           <PrivateRoute>
             <PurchaseReceipts />
+          </PrivateRoute>
+        } />
+
+        <Route path="/replacement-requests" element={
+          <PrivateRoute>
+            <ReplacementRequests />
+          </PrivateRoute>
+        } />
+
+        <Route path="/replacements" element={
+          <PrivateRoute>
+            <ReplacementRequests />
+          </PrivateRoute>
+        } />
+
+        <Route path="/replacement-confirmations" element={
+          <PrivateRoute>
+            <ReplacementRequests />
+          </PrivateRoute>
+        } />
+
+        <Route path="/replacement-acknowledgements" element={
+          <PrivateRoute>
+            <ReplacementRequests />
           </PrivateRoute>
         } />
 

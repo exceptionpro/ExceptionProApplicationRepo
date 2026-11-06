@@ -18,4 +18,6 @@ public interface PurchaseReceiptRepository extends JpaRepository<PurchaseReceipt
     List<PurchaseReceipt> findByBuyerIdOrReceivedFromSupplierIdOrderByCreatedAtDesc(UUID buyerId, UUID supplierId);
 
     boolean existsByReceiptNoAndBuyerId(String receiptNo, UUID buyerId);
+
+    boolean existsByPurchaseOrderId(UUID purchaseOrderId);
 }

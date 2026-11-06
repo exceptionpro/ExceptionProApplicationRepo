@@ -4,7 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import api from '../services/api';
 
 interface LeftNavigationProps {
-  activePage: 'dashboard' | 'home' | 'profile' | 'partners' | 'catalogue' | 'requisition' | 'request-notification' | 'collaboration-requisition' | 'collaboration-request-notification' | 'notifications' | 'admin' | 'invoices' | 'purchase-receipts' | 'reconciliation' | 'payments';
+  activePage: 'dashboard' | 'home' | 'profile' | 'partners' | 'catalogue' | 'requisition' | 'request-notification' | 'collaboration-requisition' | 'collaboration-request-notification' | 'notifications' | 'admin' | 'invoices' | 'purchase-receipts' | 'replacement-requests' | 'reconciliation' | 'payments';
 }
 
 const LeftNavigation: React.FC<LeftNavigationProps> = ({ activePage }) => {
@@ -185,6 +185,21 @@ const LeftNavigation: React.FC<LeftNavigationProps> = ({ activePage }) => {
             </a>
           )}
 
+          {isBuyer && (
+            <a
+              href="/replacement-requests"
+              className={`sidebar-link ${activePage === 'replacement-requests' ? 'active' : ''}`}
+              onClick={(e) => { e.preventDefault(); navigate('/replacement-requests'); }}
+            >
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="23 4 23 10 17 10"></polyline>
+                <polyline points="1 20 1 14 7 14"></polyline>
+                <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+              </svg>
+              Replacement Requests
+            </a>
+          )}
+
           {isSupplier && !isBuyer && (
             <a
               href="/purchase-receipts"
@@ -198,6 +213,22 @@ const LeftNavigation: React.FC<LeftNavigationProps> = ({ activePage }) => {
                 <path d="M9 14l2 2 4-4"></path>
               </svg>
               Receipts
+            </a>
+          )}
+
+          {isSupplier && !isBuyer && (
+            <a
+              href="/replacements"
+              className={`sidebar-link ${activePage === 'replacement-requests' ? 'active' : ''}`}
+              onClick={(e) => { e.preventDefault(); navigate('/replacements'); }}
+              title="Replacements Confirmations / Replacements Acknowledgements"
+            >
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="23 4 23 10 17 10"></polyline>
+                <polyline points="1 20 1 14 7 14"></polyline>
+                <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+              </svg>
+              Replacements
             </a>
           )}
 

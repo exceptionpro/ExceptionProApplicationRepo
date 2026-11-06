@@ -70,6 +70,12 @@ public class InvoiceService {
         );
 
         for (Requisition r : standardAccepted) {
+            // d) If Supplier has approved Purchase Order by modifying Quantity or Price,
+            // Supplier must have Buyer Confirmation ("APPROVED") before creating an Invoice.
+            if (Boolean.TRUE.equals(r.getSupplierModified()) && !"APPROVED".equalsIgnoreCase(r.getBuyerModificationStatus())) {
+                continue;
+            }
+
             int num = (r.getReqNumber() != null) ? r.getReqNumber().intValue() : 1;
             String code = String.format("PO%02d", num);
             BigDecimal total = r.getItems() != null ? r.getItems().stream()
@@ -232,6 +238,10 @@ public class InvoiceService {
 
             if (!"Accepted".equalsIgnoreCase(req.getStatus()) && !"PO Accepted".equalsIgnoreCase(req.getStatus())) {
                 throw new IllegalArgumentException("Invoices can only be created for Accepted Purchase Requests or Collaboration Requests");
+            }
+
+            if (Boolean.TRUE.equals(req.getSupplierModified()) && !"APPROVED".equalsIgnoreCase(req.getBuyerModificationStatus())) {
+                throw new IllegalArgumentException("Cannot create Invoice: Supplier modified Purchase Order requires Buyer approval first.");
             }
 
             if (req.getSupplier() != null && !req.getSupplier().getId().equals(supplier.getId())) {
