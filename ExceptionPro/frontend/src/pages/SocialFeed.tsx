@@ -992,6 +992,32 @@ const SocialFeed: React.FC = () => {
   const [loadingSuggestions, setLoadingSuggestions] = useState(false);
   const [connectingUserId, setConnectingUserId] = useState<string | null>(null);
 
+  // Platform Stats state
+  const [platformStats, setPlatformStats] = useState<{
+    registeredFirms: number;
+    activePartnerships: number;
+    globalReachCountries: number;
+  }>({
+    registeredFirms: 0,
+    activePartnerships: 0,
+    globalReachCountries: 0,
+  });
+
+  const fetchPlatformStats = async () => {
+    try {
+      const res = await api.get('/api/users/platform-stats');
+      if (res.data) {
+        setPlatformStats({
+          registeredFirms: Number(res.data.registeredFirms) || 0,
+          activePartnerships: Number(res.data.activePartnerships) || 0,
+          globalReachCountries: Number(res.data.globalReachCountries) || 0,
+        });
+      }
+    } catch (err) {
+      console.error('Failed to fetch platform stats', err);
+    }
+  };
+
   const fetchSuggestions = async () => {
     try {
       setLoadingSuggestions(true);
@@ -1039,6 +1065,7 @@ const SocialFeed: React.FC = () => {
   useEffect(() => {
     fetchFeed();
     fetchSuggestions();
+    fetchPlatformStats();
   }, []);
 
   const generateVideoThumbnail = (file: File): Promise<Blob | null> => {
@@ -2096,15 +2123,17 @@ const SocialFeed: React.FC = () => {
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', fontSize: '0.9rem' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between' }}>
               <span style={{ color: 'var(--text-secondary)' }}>Registered Firms:</span>
-              <strong style={{ color: 'var(--accent-primary)' }}>1,240</strong>
+              <strong style={{ color: 'var(--accent-primary)' }}>{platformStats.registeredFirms.toLocaleString()}</strong>
             </div>
             <div style={{ display: 'flex', justifyContent: 'space-between' }}>
               <span style={{ color: 'var(--text-secondary)' }}>Active Partnerships:</span>
-              <strong style={{ color: 'var(--accent-primary)' }}>3,420</strong>
+              <strong style={{ color: 'var(--accent-primary)' }}>{platformStats.activePartnerships.toLocaleString()}</strong>
             </div>
             <div style={{ display: 'flex', justifyContent: 'space-between' }}>
               <span style={{ color: 'var(--text-secondary)' }}>Global Reach:</span>
-              <strong style={{ color: 'var(--accent-primary)' }}>11 Countries</strong>
+              <strong style={{ color: 'var(--accent-primary)' }}>
+                {platformStats.globalReachCountries} {platformStats.globalReachCountries === 1 ? 'Country' : 'Countries'}
+              </strong>
             </div>
           </div>
         </div>

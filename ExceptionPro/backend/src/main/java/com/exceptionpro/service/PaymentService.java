@@ -86,17 +86,16 @@ public class PaymentService {
     }
 
     public List<PaymentResponse> getSupplierPayments(User supplier) {
-        // 1. Sync real requisitions where supplier matches
+        // 1. Sync real requisitions where supplier matches (only those with Buyer-generated Payment IDs)
         syncRealSupplierRequisitions(supplier);
 
-        // Reload payments
-        List<Payment> savedPayments = paymentRepository.findBySupplierIdOrderByCreatedAtDesc(supplier.getId());
-
-        // 2. If no payments exist, initialize with the exact specified sample records
-        if (savedPayments.isEmpty()) {
-            initSupplierSamplePayments(supplier);
-            savedPayments = paymentRepository.findBySupplierIdOrderByCreatedAtDesc(supplier.getId());
-        }
+        // Reload payments for this supplier that correspond to reconciled Purchase Orders with generated Payment IDs
+        List<Payment> savedPayments = paymentRepository.findBySupplierIdOrderByCreatedAtDesc(supplier.getId())
+                .stream()
+                .filter(p -> p.getRequisition() != null
+                        && p.getPaymentId() != null && !p.getPaymentId().isBlank()
+                        && (isReconciledSuccessfully(p.getRequisition()) || "Paid".equalsIgnoreCase(p.getPaymentStatus())))
+                .collect(Collectors.toList());
 
         // Return ordered by paymentId / creation
         return savedPayments.stream()
@@ -109,19 +108,79 @@ public class PaymentService {
         User buyer = userRepository.findByEmail(buyerEmail)
                 .orElseThrow(() -> new IllegalArgumentException("Buyer not found"));
 
+        // Clean up any legacy sample payments that are not tied to a real Requisition
+        List<Payment> existingBuyerPayments = paymentRepository.findByBuyerIdOrderByCreatedAtDesc(buyer.getId());
+        for (Payment p : existingBuyerPayments) {
+            if (p.getRequisition() == null) {
+                paymentRepository.delete(p);
+            }
+        }
+
         // 1. Synchronize real requisitions and invoices into payment records if they exist
         syncRealBuyerRequisitions(buyer);
 
-        // Reload payments after synchronization
-        List<Payment> savedPayments = paymentRepository.findByBuyerIdOrderByCreatedAtDesc(buyer.getId());
-
-        // 2. If still no payments exist, initialize with realistic sample records
-        if (savedPayments.isEmpty()) {
-            initSamplePayments(buyer);
-            savedPayments = paymentRepository.findByBuyerIdOrderByCreatedAtDesc(buyer.getId());
-        }
+        // Reload payments after synchronization (only real Purchase Orders with generated Payment IDs)
+        List<Payment> savedPayments = paymentRepository.findByBuyerIdOrderByCreatedAtDesc(buyer.getId())
+                .stream()
+                .filter(p -> p.getRequisition() != null && p.getPaymentId() != null && !p.getPaymentId().isBlank())
+                .collect(Collectors.toList());
 
         return savedPayments.stream().map(this::mapToResponse).collect(Collectors.toList());
+    }
+
+    private User resolveSupplierForRequisition(Requisition req, List<Invoice> reqInvoices, List<PurchaseReceipt> reqReceipts) {
+        if (req != null && req.getSupplier() != null) {
+            return req.getSupplier();
+        }
+        if (reqInvoices != null) {
+            for (Invoice inv : reqInvoices) {
+                if (inv.getSupplier() != null) {
+                    return inv.getSupplier();
+                }
+            }
+        }
+        if (reqReceipts != null) {
+            for (PurchaseReceipt rc : reqReceipts) {
+                if (rc.getReceivedFromSupplier() != null) {
+                    return rc.getReceivedFromSupplier();
+                }
+            }
+        }
+        if (req != null && req.getItems() != null) {
+            for (RequisitionItem item : req.getItems()) {
+                if (item.getSupplier() != null) {
+                    return item.getSupplier();
+                }
+            }
+        }
+        return null;
+    }
+
+    private String resolveCurrencyForPayment(Requisition req,
+                                             List<Invoice> reqInvoices,
+                                             ReconciliationResponse reconResp,
+                                             Reconciliation savedRecon) {
+        if (reqInvoices != null) {
+            for (Invoice inv : reqInvoices) {
+                if (inv != null && inv.getCurrencyType() != null && !inv.getCurrencyType().trim().isEmpty()) {
+                    return inv.getCurrencyType().trim().toUpperCase();
+                }
+            }
+        }
+        if (reconResp != null && reconResp.getCurrency() != null && !reconResp.getCurrency().trim().isEmpty()) {
+            return reconResp.getCurrency().trim().toUpperCase();
+        }
+        if (savedRecon != null && savedRecon.getCurrency() != null && !savedRecon.getCurrency().trim().isEmpty()) {
+            return savedRecon.getCurrency().trim().toUpperCase();
+        }
+        if (req != null && req.getItems() != null) {
+            for (RequisitionItem item : req.getItems()) {
+                if (item != null && item.getCurrencyType() != null && !item.getCurrencyType().trim().isEmpty()) {
+                    return item.getCurrencyType().trim().toUpperCase();
+                }
+            }
+        }
+        return "INR";
     }
 
     /**
@@ -167,11 +226,11 @@ public class PaymentService {
             String poNumber = String.format("PO%02d", num);
 
             // Check if payment already exists for this requisition
-            Optional<Payment> existingOpt = paymentRepository.findByPoNumber(poNumber)
-                    .or(() -> paymentRepository.findAll().stream()
-                            .filter(p -> p.getBuyer() != null && p.getBuyer().getId().equals(buyer.getId()) &&
-                                    p.getRequisition() != null && p.getRequisition().getId().equals(req.getId()))
-                            .findFirst());
+            Optional<Payment> existingOpt = paymentRepository.findAll().stream()
+                    .filter(p -> (p.getRequisition() != null && p.getRequisition().getId().equals(req.getId())) ||
+                            (p.getBuyer() != null && p.getBuyer().getId().equals(buyer.getId()) &&
+                                    p.getPoNumber() != null && p.getPoNumber().equalsIgnoreCase(poNumber)))
+                    .findFirst();
 
             // Condition: The Purchase Orders which have Reconciled successfully only those Purchase Orders the Payment Id should be generated.
             boolean reconciled = isReconciledSuccessfully(req);
@@ -186,6 +245,7 @@ public class PaymentService {
                 continue;
             }
 
+            boolean isNewPayment = existingOpt.isEmpty();
             Payment payment;
             if (existingOpt.isPresent()) {
                 payment = existingOpt.get();
@@ -197,7 +257,7 @@ public class PaymentService {
                 payment.setId(UUID.randomUUID());
                 payment.setPaymentId(generateUniquePaymentId());
                 payment.setPaymentDate(LocalDate.now());
-                payment.setPaymentStatus("Payment Due");
+                payment.setPaymentStatus("Pending");
                 payment.setCreatedAt(LocalDateTime.now());
             }
 
@@ -215,9 +275,10 @@ public class PaymentService {
             payment.setRequisition(req);
             payment.setPoNumber(poNumber);
 
-            if (req.getSupplier() != null) {
-                payment.setSupplier(req.getSupplier());
-                payment.setSupplierName(getUserDisplayName(req.getSupplier()));
+            User resolvedSupplier = resolveSupplierForRequisition(req, reqInvoices, reqReceipts);
+            if (resolvedSupplier != null) {
+                payment.setSupplier(resolvedSupplier);
+                payment.setSupplierName(getUserDisplayName(resolvedSupplier));
             } else if (payment.getSupplierName() == null || payment.getSupplierName().isBlank()) {
                 payment.setSupplierName("ABC Technologies Pvt Ltd");
             }
@@ -356,150 +417,86 @@ public class PaymentService {
                 }
             }
 
-            // Update payment status (preserve "Paid" if already paid)
-            if (!"Paid".equalsIgnoreCase(payment.getPaymentStatus())) {
+            // Preserve payment status if already set (Pending, Payment Due, Paid)
+            if (isNewPayment || payment.getPaymentStatus() == null || payment.getPaymentStatus().isBlank()) {
                 if ("Exception".equalsIgnoreCase(payment.getReconciliationStatus())) {
                     payment.setPaymentStatus("On Hold");
                 } else {
-                    payment.setPaymentStatus("Payment Due");
+                    payment.setPaymentStatus("Pending");
+                }
+            } else if (!"Paid".equalsIgnoreCase(payment.getPaymentStatus())) {
+                if ("Exception".equalsIgnoreCase(payment.getReconciliationStatus())) {
+                    payment.setPaymentStatus("On Hold");
+                } else if ("On Hold".equalsIgnoreCase(payment.getPaymentStatus())) {
+                    payment.setPaymentStatus("Pending");
                 }
             }
 
             payment.setAmountToPay(payment.getInvoiceAmount());
-            payment.setCurrency("INR");
+            String resolvedCurrency = resolveCurrencyForPayment(req, reqInvoices, reconResp, payment.getReconciliation());
+            payment.setCurrency(resolvedCurrency);
             payment.setUpdatedAt(LocalDateTime.now());
             paymentRepository.save(payment);
         }
     }
 
     private void syncRealSupplierRequisitions(User supplier) {
-        List<Requisition> suppReqs = requisitionRepository.findAll().stream()
-                .filter(r -> r.getSupplier() != null && r.getSupplier().getId().equals(supplier.getId()))
-                .collect(Collectors.toList());
-        if (suppReqs.isEmpty()) {
-            return;
-        }
-
-        List<PurchaseReceipt> allReceipts = purchaseReceiptRepository.findAll().stream()
-                .filter(r -> r.getReceivedFromSupplier() != null && r.getReceivedFromSupplier().getId().equals(supplier.getId()))
-                .collect(Collectors.toList());
-        List<Invoice> allInvoices = invoiceRepository.findAll().stream()
-                .filter(i -> i.getSupplier() != null && i.getSupplier().getId().equals(supplier.getId()))
-                .collect(Collectors.toList());
-
-        for (Requisition req : suppReqs) {
-            int num = (req.getReqNumber() != null) ? req.getReqNumber().intValue() : 1;
-            String poNumber = String.format("PO%02d", num);
-
-            Optional<Payment> existingOpt = paymentRepository.findAll().stream()
-                    .filter(p -> p.getSupplier() != null && p.getSupplier().getId().equals(supplier.getId()) &&
-                            ((p.getRequisition() != null && p.getRequisition().getId().equals(req.getId())) ||
-                                    (p.getPoNumber() != null && p.getPoNumber().equalsIgnoreCase(poNumber))))
-                    .findFirst();
-
-            if (existingOpt.isPresent()) {
-                continue;
-            }
-
-            Payment payment = new Payment();
-            payment.setId(UUID.randomUUID());
-            payment.setPaymentId(generateUniquePaymentId());
-            payment.setPaymentDate(LocalDate.now());
-            payment.setSupplier(supplier);
-            payment.setSupplierName(getUserDisplayName(supplier));
-            payment.setBuyer(req.getBuyer());
-            payment.setBuyerName(req.getBuyer() != null ? getUserDisplayName(req.getBuyer()) : "Enterprise Buyer");
-            payment.setRequisition(req);
-            payment.setPoNumber(poNumber);
-
-            int poQty = 0;
-            BigDecimal poAmount = BigDecimal.ZERO;
-            if (req.getItems() != null) {
-                for (RequisitionItem item : req.getItems()) {
-                    int q = (item.getQuantity() != null) ? item.getQuantity().intValue() : 0;
-                    BigDecimal price = item.getPrice() != null ? item.getPrice() : BigDecimal.ZERO;
-                    poQty += q;
-                    poAmount = poAmount.add(price.multiply(BigDecimal.valueOf(q)));
+        // 1. Clean up any legacy sample payments (requisition == null) or unreconciled supplier payments
+        List<Payment> allPayments = paymentRepository.findAll();
+        for (Payment p : allPayments) {
+            if (p.getRequisition() == null) {
+                paymentRepository.delete(p);
+            } else if (p.getSupplier() != null && p.getSupplier().getId().equals(supplier.getId())) {
+                if (!isReconciledSuccessfully(p.getRequisition()) && !"Paid".equalsIgnoreCase(p.getPaymentStatus())) {
+                    paymentRepository.delete(p);
                 }
             }
-            payment.setPoQuantity(poQty);
-            payment.setPoAmount(poAmount.setScale(2, RoundingMode.HALF_UP));
-            payment.setPoUnitPrice(poQty > 0 ? poAmount.divide(BigDecimal.valueOf(poQty), 2, RoundingMode.HALF_UP) : BigDecimal.ZERO);
+        }
 
+        // 2. Sync all Buyers who have Purchase Orders, Invoices, or Receipts associated with this Supplier
+        List<PurchaseReceipt> allReceipts = purchaseReceiptRepository.findAll();
+        List<Invoice> allInvoices = invoiceRepository.findAll();
+        List<Requisition> allReqs = requisitionRepository.findAll();
+
+        java.util.Set<UUID> buyerIdsSynced = new java.util.HashSet<>();
+        for (Requisition req : allReqs) {
+            if (req.getBuyer() == null || buyerIdsSynced.contains(req.getBuyer().getId())) {
+                continue;
+            }
             List<PurchaseReceipt> reqReceipts = allReceipts.stream()
                     .filter(rc -> rc.getPurchaseOrder() != null && rc.getPurchaseOrder().getId().equals(req.getId()))
                     .collect(Collectors.toList());
-            if (!reqReceipts.isEmpty()) {
-                PurchaseReceipt firstRc = reqReceipts.get(0);
-                payment.setPurchaseReceipt(firstRc);
-                payment.setReceiptNumber(firstRc.getReceiptNo() != null ? firstRc.getReceiptNo() : "REC-001");
-                payment.setReceiptDate(firstRc.getReceiptDate() != null ? firstRc.getReceiptDate() : LocalDate.now());
-                int recQty = reqReceipts.stream().mapToInt(r -> (r.getQuantity() != null) ? r.getQuantity().intValue() : 0).sum();
-                payment.setReceivedQuantity(recQty);
-                payment.setReceivedAmount(payment.getPoUnitPrice().multiply(BigDecimal.valueOf(recQty)).setScale(2, RoundingMode.HALF_UP));
-            } else {
-                payment.setReceiptNumber("REC-" + String.format("%03d", num));
-                payment.setReceiptDate(LocalDate.now());
-                payment.setReceivedQuantity(poQty);
-                payment.setReceivedAmount(poAmount);
-            }
-
             List<Invoice> reqInvoices = allInvoices.stream()
                     .filter(inv -> inv.getRequisition() != null && inv.getRequisition().getId().equals(req.getId()))
                     .collect(Collectors.toList());
-            if (!reqInvoices.isEmpty()) {
-                Invoice firstInv = reqInvoices.get(0);
-                payment.setInvoice(firstInv);
-                payment.setInvoiceNumber(firstInv.getInvoiceNumber());
-                payment.setInvoiceDate(firstInv.getInvoiceDate());
-                payment.setInvoiceAmount(firstInv.getTotalAmount());
-                // Requirement 3: Invoice quantity should be same as PO Quantity
-                payment.setInvoiceQuantity(poQty);
-                payment.setInvoiceUnitPrice(payment.getPoUnitPrice());
-            } else {
-                payment.setInvoiceNumber("INV-2026-" + String.format("%04d", num + 100));
-                payment.setInvoiceDate(LocalDate.now());
-                payment.setInvoiceQuantity(poQty);
-                payment.setInvoiceUnitPrice(payment.getPoUnitPrice());
-                payment.setInvoiceAmount(poAmount);
+            User resolvedSupp = resolveSupplierForRequisition(req, reqInvoices, reqReceipts);
+            if (resolvedSupp != null && resolvedSupp.getId().equals(supplier.getId())) {
+                buyerIdsSynced.add(req.getBuyer().getId());
+                syncRealBuyerRequisitions(req.getBuyer());
             }
+        }
 
-            ReconciliationResponse suppReconResp = null;
-            try {
-                suppReconResp = reconciliationService.getReconciliationForStandardRequisition(req);
-            } catch (Exception e) {
-                // ignore
+        // 3. Ensure any existing Buyer-generated Payment record belonging to this Supplier has supplier linked
+        List<Payment> currentPayments = paymentRepository.findAll();
+        for (Payment p : currentPayments) {
+            if (p.getRequisition() == null) {
+                continue;
             }
-
-            if (suppReconResp != null) {
-                String rStatus = suppReconResp.getOverallResult() != null ? suppReconResp.getOverallResult() : "MATCHED";
-                if ("MATCHED".equalsIgnoreCase(rStatus)) {
-                    payment.setReconciliationStatus("Matched");
-                    payment.setPaymentStatus("Payment Due");
-                } else {
-                    payment.setReconciliationStatus("Exception");
-                    payment.setExceptionReason(suppReconResp.getRemarks() != null && !suppReconResp.getRemarks().isBlank() ? suppReconResp.getRemarks() : "Variance detected during reconciliation match.");
-                    payment.setPaymentStatus("On Hold");
-                }
-            } else {
-                boolean qtyMatch = payment.getPoQuantity().equals(payment.getReceivedQuantity()) && payment.getReceivedQuantity().equals(payment.getInvoiceQuantity());
-                boolean priceMatch = payment.getPoUnitPrice().compareTo(payment.getInvoiceUnitPrice()) == 0;
-                boolean amtMatch = payment.getPoAmount().compareTo(payment.getReceivedAmount()) == 0 && payment.getReceivedAmount().compareTo(payment.getInvoiceAmount()) == 0;
-
-                if (qtyMatch && priceMatch && amtMatch) {
-                    payment.setReconciliationStatus("Matched");
-                    payment.setPaymentStatus("Payment Due");
-                } else {
-                    payment.setReconciliationStatus("Exception");
-                    payment.setExceptionReason("Variance detected in quantities or amounts.");
-                    payment.setPaymentStatus("On Hold");
+            Requisition req = p.getRequisition();
+            List<PurchaseReceipt> reqReceipts = allReceipts.stream()
+                    .filter(rc -> rc.getPurchaseOrder() != null && rc.getPurchaseOrder().getId().equals(req.getId()))
+                    .collect(Collectors.toList());
+            List<Invoice> reqInvoices = allInvoices.stream()
+                    .filter(inv -> inv.getRequisition() != null && inv.getRequisition().getId().equals(req.getId()))
+                    .collect(Collectors.toList());
+            User resolvedSupp = resolveSupplierForRequisition(req, reqInvoices, reqReceipts);
+            if (resolvedSupp != null && resolvedSupp.getId().equals(supplier.getId())) {
+                if (p.getSupplier() == null || !p.getSupplier().getId().equals(supplier.getId())) {
+                    p.setSupplier(supplier);
+                    p.setSupplierName(getUserDisplayName(supplier));
+                    paymentRepository.save(p);
                 }
             }
-
-            payment.setAmountToPay(payment.getInvoiceAmount());
-            payment.setCurrency("INR");
-            payment.setCreatedAt(LocalDateTime.now());
-            paymentRepository.save(payment);
         }
     }
 
@@ -660,6 +657,21 @@ public class PaymentService {
         Payment payment = paymentRepository.findById(Objects.requireNonNull(id))
                 .orElseThrow(() -> new IllegalArgumentException("Payment not found"));
 
+        if (payment.getSupplier() == null && payment.getRequisition() != null) {
+            Requisition req = payment.getRequisition();
+            List<PurchaseReceipt> reqReceipts = purchaseReceiptRepository.findAll().stream()
+                    .filter(rc -> rc.getPurchaseOrder() != null && rc.getPurchaseOrder().getId().equals(req.getId()))
+                    .collect(Collectors.toList());
+            List<Invoice> reqInvoices = invoiceRepository.findAll().stream()
+                    .filter(inv -> inv.getRequisition() != null && inv.getRequisition().getId().equals(req.getId()))
+                    .collect(Collectors.toList());
+            User resolvedSupp = resolveSupplierForRequisition(req, reqInvoices, reqReceipts);
+            if (resolvedSupp != null) {
+                payment.setSupplier(resolvedSupp);
+                payment.setSupplierName(getUserDisplayName(resolvedSupp));
+            }
+        }
+
         payment.setPaymentStatus("Payment Due");
         payment.setUpdatedAt(LocalDateTime.now());
         Payment saved = paymentRepository.save(payment);
@@ -688,6 +700,21 @@ public class PaymentService {
 
         Payment payment = paymentRepository.findById(Objects.requireNonNull(id))
                 .orElseThrow(() -> new IllegalArgumentException("Payment not found"));
+
+        if (payment.getSupplier() == null && payment.getRequisition() != null) {
+            Requisition req = payment.getRequisition();
+            List<PurchaseReceipt> reqReceipts = purchaseReceiptRepository.findAll().stream()
+                    .filter(rc -> rc.getPurchaseOrder() != null && rc.getPurchaseOrder().getId().equals(req.getId()))
+                    .collect(Collectors.toList());
+            List<Invoice> reqInvoices = invoiceRepository.findAll().stream()
+                    .filter(inv -> inv.getRequisition() != null && inv.getRequisition().getId().equals(req.getId()))
+                    .collect(Collectors.toList());
+            User resolvedSupp = resolveSupplierForRequisition(req, reqInvoices, reqReceipts);
+            if (resolvedSupp != null) {
+                payment.setSupplier(resolvedSupp);
+                payment.setSupplierName(getUserDisplayName(resolvedSupp));
+            }
+        }
 
         payment.setPaymentStatus("Paid");
         payment.setUpdatedAt(LocalDateTime.now());
@@ -938,6 +965,11 @@ public class PaymentService {
         }
 
         if (reconResp != null) {
+            if (reconResp.getCurrency() != null && !reconResp.getCurrency().isBlank()) {
+                r.setCurrency(reconResp.getCurrency().trim().toUpperCase());
+            } else if (p.getInvoice() != null && p.getInvoice().getCurrencyType() != null && !p.getInvoice().getCurrencyType().isBlank()) {
+                r.setCurrency(p.getInvoice().getCurrencyType().trim().toUpperCase());
+            }
             r.setQuantityMatchStatus(reconResp.getQuantityMatchStatus());
             r.setPriceMatchStatus(reconResp.getPriceMatchStatus());
             r.setAmountMatchStatus(reconResp.getAmountMatchStatus());

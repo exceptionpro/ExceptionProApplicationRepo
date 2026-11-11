@@ -124,17 +124,23 @@ const Reconciliation: React.FC = () => {
     fetchReconciliationData();
   }, []);
 
-  const fetchReconciliationData = async () => {
+  const fetchReconciliationData = async (targetRecordId?: string, targetCurrency?: string) => {
     setLoading(true);
     setError('');
     try {
       const res = await api.get('/api/reconciliation');
       if (res.data && res.data.records) {
-        setRecords(res.data.records);
-        if (res.data.records.length > 0) {
-          const first = res.data.records[0];
-          populateFormWithRecord(first);
-          setSelectedRecordId(first.id);
+        const fetchedRecords: ReconciliationRecord[] = res.data.records;
+        setRecords(fetchedRecords);
+        if (fetchedRecords.length > 0) {
+          const matchedRecord = targetRecordId
+            ? fetchedRecords.find((r) => r.id === targetRecordId) || fetchedRecords[0]
+            : fetchedRecords[0];
+          populateFormWithRecord(matchedRecord);
+          setSelectedRecordId(matchedRecord.id);
+          if (targetCurrency) {
+            setCurrency(targetCurrency);
+          }
         } else {
           clearForm();
         }
@@ -266,11 +272,39 @@ const Reconciliation: React.FC = () => {
 
   const handleSelectRecord = (recordId: string) => {
     setSelectedRecordId(recordId);
+    setSuccess('');
+    setError('');
     const rec = records.find((r) => r.id === recordId);
     if (rec) {
-      populateFormWithRecord(rec);
-      setSuccess('');
-      setError('');
+      const recCurr = (rec.currency || 'INR').trim().toUpperCase();
+      const currentSelectedCurr = (currency || '').trim().toUpperCase();
+      if (recCurr === currentSelectedCurr) {
+        populateFormWithRecord(rec);
+      }
+    }
+  };
+
+  const handleRefresh = async () => {
+    setSuccess('');
+    setError('');
+
+    if (records.length === 0) {
+      await fetchReconciliationData();
+      return;
+    }
+
+    const selectedRec = records.find((r) => r.id === selectedRecordId) || records[0];
+    if (selectedRec) {
+      const expectedCurrency = (selectedRec.currency || 'INR').trim().toUpperCase();
+      const selectedCurrency = (currency || '').trim().toUpperCase();
+
+      if (selectedCurrency !== expectedCurrency) {
+        setError('Reference to Invocie, Order ID and Currency are not matching, Please select the matching Currency.');
+        return;
+      }
+
+      await fetchReconciliationData(selectedRec.id, selectedCurrency);
+      setSuccess(`Reconciliation page refreshed for ${selectedRec.poNumber} (${selectedCurrency}).`);
     }
   };
 
@@ -535,7 +569,11 @@ const Reconciliation: React.FC = () => {
               </label>
               <select
                 value={currency}
-                onChange={(e) => setCurrency(e.target.value)}
+                onChange={(e) => {
+                  setCurrency(e.target.value);
+                  setError('');
+                  setSuccess('');
+                }}
                 className="form-control"
                 style={{
                   padding: '0.65rem 1rem',
@@ -551,6 +589,13 @@ const Reconciliation: React.FC = () => {
                 <option value="USD">USD ($)</option>
                 <option value="EUR">EUR (€)</option>
                 <option value="GBP">GBP (£)</option>
+                {Array.from(new Set(records.map((r) => (r.currency || '').trim().toUpperCase())))
+                  .filter((c) => c && !['INR', 'USD', 'EUR', 'GBP'].includes(c))
+                  .map((c) => (
+                    <option key={c} value={c}>
+                      {c}
+                    </option>
+                  ))}
               </select>
             </div>
           </div>
@@ -579,7 +624,8 @@ const Reconciliation: React.FC = () => {
           {/* 3. Refresh Button */}
           <div className="reconciliation-field-row" style={{ marginTop: '0.25rem', alignItems: 'center' }}>
             <button
-              onClick={fetchReconciliationData}
+              type="button"
+              onClick={handleRefresh}
               className="btn btn-secondary reconciliation-refresh-btn"
               style={{
                 padding: '0.65rem 1.5rem',
@@ -608,6 +654,33 @@ const Reconciliation: React.FC = () => {
               Refresh
             </button>
           </div>
+
+          {error && (
+            <div
+              style={{
+                marginTop: '0.85rem',
+                padding: '0.75rem 1rem',
+                backgroundColor: '#fef2f2',
+                border: '1px solid #fecaca',
+                borderRadius: '8px',
+                color: '#dc2626',
+                fontSize: '0.9rem',
+                fontWeight: 600,
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center'
+              }}
+            >
+              <span>⚠️ {error}</span>
+              <button
+                type="button"
+                onClick={() => setError('')}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', fontWeight: 'bold', color: '#dc2626', fontSize: '1.1rem' }}
+              >
+                ×
+              </button>
+            </div>
+          )}
         </div>
 
         {/* ==================================================== */}

@@ -329,7 +329,21 @@ public class ReconciliationService {
         String poCode = String.format("PO%02d", num);
         resp.setPoNumber(poCode);
         resp.setOrderTitle(req.getTitle());
-        resp.setCurrency("INR");
+
+        String resolvedCurrency = invoices.stream()
+                .map(Invoice::getCurrencyType)
+                .filter(c -> c != null && !c.trim().isEmpty())
+                .map(c -> c.trim().toUpperCase())
+                .findFirst()
+                .orElseGet(() -> req.getItems() != null
+                        ? req.getItems().stream()
+                                .map(RequisitionItem::getCurrencyType)
+                                .filter(c -> c != null && !c.trim().isEmpty())
+                                .map(c -> c.trim().toUpperCase())
+                                .findFirst()
+                                .orElse("INR")
+                        : "INR");
+        resp.setCurrency(resolvedCurrency);
 
         // Reconciliation Number & Date
         if (saved != null && saved.getReconciliationNumber() != null) {

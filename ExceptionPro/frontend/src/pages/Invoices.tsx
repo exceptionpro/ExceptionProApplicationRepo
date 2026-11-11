@@ -14,6 +14,7 @@ interface EligibleRequest {
   totalAmount: number;
   currencyType?: string;
   itemCount: number;
+  totalQuantity?: number;
   needByDate: string;
 }
 
@@ -71,6 +72,7 @@ const InvoicesPage: React.FC = () => {
   const [invoiceNumber, setInvoiceNumber] = useState<string>('');
   const [invoiceDate, setInvoiceDate] = useState<string>('');
   const [dueDate, setDueDate] = useState<string>('');
+  const [quantity, setQuantity] = useState<number | ''>('');
   const [poAmount, setPoAmount] = useState<number | ''>(0);
   const [currencyType, setCurrencyType] = useState<string>('');
   const [taxPercentage, setTaxPercentage] = useState<string>('');
@@ -170,9 +172,18 @@ const InvoicesPage: React.FC = () => {
     return `INV-${new Date().getFullYear()}-${randomNum}`;
   };
 
+  const isRequestAlreadyInvoiced = (reqId: string): boolean => {
+    return invoices.some(
+      (inv) => inv.requisitionId === reqId || inv.collaborationRequisitionId === reqId
+    );
+  };
+
   const handleSelectRequest = (reqId: string) => {
+    setError('');
+    setSuccess('');
     setSelectedRequestId(reqId);
     if (!reqId) {
+      setQuantity('');
       setPoAmount(0);
       setCurrencyType('');
       setTaxPercentage('');
@@ -181,9 +192,15 @@ const InvoicesPage: React.FC = () => {
       return;
     }
 
+    if (isRequestAlreadyInvoiced(reqId)) {
+      setError('An invoice has already been created for this Purchase Request. You cannot create more than one invoice for the same Purchase Request.');
+    }
+
     const req = eligibleRequests.find((r) => r.id === reqId);
     if (req) {
       const baseAmt = req.totalAmount !== undefined ? req.totalAmount : 0;
+      const reqQty = req.totalQuantity !== undefined ? req.totalQuantity : (req.itemCount || 0);
+      setQuantity(reqQty);
       setPoAmount(baseAmt);
       setCurrencyType(req.currencyType || 'USD');
       setTaxAmount(calculateTaxAmount(baseAmt, taxPercentage));
@@ -210,6 +227,10 @@ const InvoicesPage: React.FC = () => {
 
     if (!selectedRequestId) {
       setError('Please select an Accepted Purchase Request or Collaboration Request.');
+      return;
+    }
+    if (isRequestAlreadyInvoiced(selectedRequestId)) {
+      setError('An invoice has already been created for this Purchase Request. You cannot create more than one invoice for the same Purchase Request.');
       return;
     }
     if (!invoiceNumber.trim()) {
@@ -268,6 +289,7 @@ const InvoicesPage: React.FC = () => {
       setInvoiceNumber('');
       setInvoiceDate('');
       setDueDate('');
+      setQuantity('');
       setPoAmount(0);
       setCurrencyType('');
       setTaxPercentage('');
@@ -343,25 +365,6 @@ const InvoicesPage: React.FC = () => {
       setError(err.response?.data?.message || 'Failed to update invoice');
     } finally {
       setEditSubmitting(false);
-    }
-  };
-
-  const handleDeleteInvoice = async (inv: InvoiceData) => {
-    if (!window.confirm(`Are you sure you want to delete invoice '${inv.invoiceNumber}'?`)) {
-      return;
-    }
-    setError('');
-    setSuccess('');
-
-    try {
-      await api.delete(`/api/invoices/${inv.id}`);
-      setSuccess(`Invoice '${inv.invoiceNumber}' deleted successfully!`);
-      fetchInvoices();
-      if (isSupplier) {
-        fetchEligibleRequests();
-      }
-    } catch (err: any) {
-      setError(err.response?.data?.message || 'Failed to delete invoice');
     }
   };
 
@@ -560,7 +563,18 @@ const InvoicesPage: React.FC = () => {
                 </div>
 
                 <div className="form-group half-width">
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0.75rem' }}>
+                    <div>
+                      <label className="form-label">Quantity</label>
+                      <input
+                        type="number"
+                        className="form-input"
+                        placeholder="0"
+                        value={quantity}
+                        readOnly
+                        style={{ background: 'var(--bg-tertiary)', cursor: 'not-allowed', color: 'var(--text-primary)', fontWeight: 600 }}
+                      />
+                    </div>
                     <div>
                       <label className="form-label">PO Amount *</label>
                       <input
@@ -849,34 +863,6 @@ const InvoicesPage: React.FC = () => {
                         onClick={() => handleStartEdit(inv)}
                       >
                         Edit
-                      </button>
-                    )}
-
-                    {/* Delete (Supplier only) */}
-                    {isSupplier && (
-                      <button
-                        className="btn"
-                        style={{
-                          width: '140px',
-                          minWidth: '140px',
-                          height: '38px',
-                          display: 'inline-flex',
-                          justifyContent: 'center',
-                          alignItems: 'center',
-                          fontSize: '0.85rem',
-                          background: '#ef4444',
-                          color: '#ffffff',
-                          border: 'none',
-                          borderRadius: '6px',
-                          cursor: 'pointer',
-                          fontWeight: 600,
-                          whiteSpace: 'nowrap',
-                          flexShrink: 0,
-                          boxSizing: 'border-box',
-                        }}
-                        onClick={() => handleDeleteInvoice(inv)}
-                      >
-                        Delete
                       </button>
                     )}
                   </div>

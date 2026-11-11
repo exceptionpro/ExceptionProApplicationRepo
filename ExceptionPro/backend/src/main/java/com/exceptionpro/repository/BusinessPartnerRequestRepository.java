@@ -40,4 +40,6 @@ public interface BusinessPartnerRequestRepository extends JpaRepository<Business
                      "LEFT JOIN FETCH rec.corporateProfile " +
                      "WHERE r.sender.id = :userId AND r.status = 'PENDING'")
        List<BusinessPartnerRequest> findOutgoingPendingRequests(@Param("userId") UUID userId);
+
+       long countByStatus(String status);
 }

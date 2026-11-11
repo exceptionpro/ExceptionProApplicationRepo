@@ -655,19 +655,6 @@ const CollaborationRequisitionPage: React.FC = () => {
     }
   };
 
-  const handleDeleteRequisition = async (id: string) => {
-    if (!window.confirm('Are you sure you want to delete this collaboration requisition?')) return;
-    setError('');
-    setSuccess('');
-    try {
-      await api.delete(`/api/collaboration-requisitions/${id}`);
-      setSuccess('Collaboration Requisition deleted successfully!');
-      fetchCollaborationRequisitions();
-    } catch (err: any) {
-      setError(err.response?.data?.message || 'Failed to delete collaboration requisition');
-    }
-  };
-
   const handleEvaluateProposal = async (proposalId: string, status: string) => {
     try {
       setError('');
@@ -1319,25 +1306,6 @@ const CollaborationRequisitionPage: React.FC = () => {
                                 title={isAllPo ? 'Cannot edit: Purchase Order already generated' : 'Edit'}
                               >
                                 Edit
-                              </button>
-                              <button
-                                type="button"
-                                className="btn"
-                                disabled={isAllPo}
-                                style={{
-                                  padding: '0.25rem 0.5rem',
-                                  fontSize: '0.8rem',
-                                  background: isAllPo ? '#6b7280' : '#ef4444',
-                                  color: '#fff',
-                                  border: 'none',
-                                  borderRadius: '4px',
-                                  cursor: isAllPo ? 'not-allowed' : 'pointer',
-                                  opacity: isAllPo ? 0.5 : 1,
-                                }}
-                                onClick={() => !isAllPo && handleDeleteRequisition(req.id)}
-                                title={isAllPo ? 'Cannot delete: Purchase Order already generated' : 'Delete'}
-                              >
-                                Delete
                               </button>
                               <button
                                 type="button"

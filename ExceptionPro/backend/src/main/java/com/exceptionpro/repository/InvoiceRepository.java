@@ -17,4 +17,8 @@ public interface InvoiceRepository extends JpaRepository<Invoice, UUID> {
     List<Invoice> findByBuyerIdOrderByCreatedAtDesc(@Param("buyerId") UUID buyerId);
 
     boolean existsByInvoiceNumber(String invoiceNumber);
+
+    boolean existsByRequisitionId(UUID requisitionId);
+
+    boolean existsByCollaborationRequisitionIdAndSupplierId(UUID collaborationRequisitionId, UUID supplierId);
 }

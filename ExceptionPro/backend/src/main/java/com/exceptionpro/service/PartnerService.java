@@ -13,6 +13,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
@@ -325,5 +326,23 @@ public class PartnerService {
         }
 
         return new PartnerRecommendationsResponse(title, results);
+    }
+
+    public Map<String, Object> getPlatformStats() {
+        List<User> users = userRepository.findAllNonAdminUsersWithProfiles();
+        long registeredFirms = users.size();
+        long activePartnerships = requestRepository.countByStatus("ACCEPTED");
+        long globalReachCountries = users.stream()
+                .map(u -> u.getCorporateProfile() != null ? u.getCorporateProfile().getCountry() : null)
+                .filter(c -> c != null && !c.trim().isEmpty())
+                .map(c -> c.trim().toLowerCase())
+                .distinct()
+                .count();
+
+        return Map.of(
+                "registeredFirms", registeredFirms,
+                "activePartnerships", activePartnerships,
+                "globalReachCountries", globalReachCountries
+        );
     }
 }

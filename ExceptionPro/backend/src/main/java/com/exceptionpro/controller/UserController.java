@@ -58,4 +58,16 @@ public class UserController {
             return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
         }
     }
+
+    @GetMapping("/platform-stats")
+    public ResponseEntity<?> getPlatformStats(Principal principal) {
+        if (principal == null) {
+            return ResponseEntity.status(401).body(Map.of("message", "Unauthorized"));
+        }
+        try {
+            return ResponseEntity.ok(partnerService.getPlatformStats());
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
+        }
+    }
 }

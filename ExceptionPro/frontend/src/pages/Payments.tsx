@@ -75,150 +75,6 @@ interface PaymentRecord {
   updatedAt?: string;
 }
 
-const DEFAULT_SUPPLIER_PAYMENTS: PaymentRecord[] = [
-  {
-    id: 'pay-000001-default',
-    paymentId: 'PAY-000001',
-    paymentDate: '2026-09-21',
-    paymentStatus: 'Paid',
-    currency: 'INR',
-    buyerName: 'XYZ Manufacturing',
-    supplierName: 'ABC Technologies Pvt Ltd',
-    poNumber: 'PO-00125',
-    poQuantity: 100,
-    poUnitPrice: 1250,
-    poAmount: 125000,
-    receiptNumber: 'REC-003',
-    receiptDate: '2026-09-21',
-    receivedQuantity: 100,
-    receivedAmount: 125000,
-    receiptAmount: 125000,
-    invoiceNumber: 'INV-00456',
-    invoiceDate: '2026-09-22',
-    invoiceQuantity: 100,
-    invoiceUnitPrice: 1250,
-    invoiceAmount: 125000,
-    amountToPay: 125000,
-    reconciliationStatus: 'Matched',
-    quantityMatchStatus: 'MATCHED',
-    priceMatchStatus: 'MATCHED',
-    amountMatchStatus: 'MATCHED',
-    taxMatchStatus: 'MATCHED',
-    overallResult: 'MATCHED',
-    invoiceBaseAmount: 125000,
-    taxPercentage: 18,
-    calculatedTaxAmount: 22500,
-    taxAmount: 22500,
-    taxVariance: 0
-  },
-  {
-    id: 'pay-000002-default',
-    paymentId: 'PAY-000002',
-    paymentDate: '2026-09-22',
-    paymentStatus: 'Payment Due',
-    currency: 'INR',
-    buyerName: 'ABC Industries',
-    supplierName: 'ABC Technologies Pvt Ltd',
-    poNumber: 'PO-00126',
-    poQuantity: 85,
-    poUnitPrice: 1000,
-    poAmount: 85000,
-    receiptNumber: 'REC-004',
-    receiptDate: '2026-09-22',
-    receivedQuantity: 85,
-    receivedAmount: 85000,
-    receiptAmount: 85000,
-    invoiceNumber: 'INV-00478',
-    invoiceDate: '2026-09-23',
-    invoiceQuantity: 85,
-    invoiceUnitPrice: 1000,
-    invoiceAmount: 85000,
-    amountToPay: 85000,
-    reconciliationStatus: 'Matched',
-    quantityMatchStatus: 'MATCHED',
-    priceMatchStatus: 'MATCHED',
-    amountMatchStatus: 'MATCHED',
-    taxMatchStatus: 'MATCHED',
-    overallResult: 'MATCHED',
-    invoiceBaseAmount: 85000,
-    taxPercentage: 18,
-    calculatedTaxAmount: 15300,
-    taxAmount: 15300,
-    taxVariance: 0
-  },
-  {
-    id: 'pay-000003-default',
-    paymentId: 'PAY-000003',
-    paymentDate: '2026-09-20',
-    paymentStatus: 'On Hold',
-    currency: 'INR',
-    buyerName: 'DEF Corp',
-    supplierName: 'ABC Technologies Pvt Ltd',
-    poNumber: 'PO-00127',
-    poQuantity: 50,
-    poUnitPrice: 1000,
-    poAmount: 50000,
-    receiptNumber: 'REC-005',
-    receiptDate: '2026-09-20',
-    receivedQuantity: 40,
-    receivedAmount: 40000,
-    receiptAmount: 40000,
-    invoiceNumber: 'INV-00489',
-    invoiceDate: '2026-09-23',
-    invoiceQuantity: 50,
-    invoiceUnitPrice: 1000,
-    invoiceAmount: 50000,
-    amountToPay: 50000,
-    reconciliationStatus: 'Exception',
-    exceptionReason: 'Invoice quantity exceeds received quantity.',
-    quantityMatchStatus: 'MISMATCH',
-    priceMatchStatus: 'MATCHED',
-    amountMatchStatus: 'MISMATCH',
-    taxMatchStatus: 'MATCHED',
-    overallResult: 'EXCEPTION',
-    invoiceBaseAmount: 50000,
-    taxPercentage: 18,
-    calculatedTaxAmount: 9000,
-    taxAmount: 9000,
-    taxVariance: 0
-  },
-  {
-    id: 'pay-000004-default',
-    paymentId: 'PAY-000004',
-    paymentDate: '2026-09-24',
-    paymentStatus: 'Pending',
-    currency: 'INR',
-    buyerName: 'PQR Ltd',
-    supplierName: 'ABC Technologies Pvt Ltd',
-    poNumber: 'PO-00128',
-    poQuantity: 75,
-    poUnitPrice: 1000,
-    poAmount: 75000,
-    receiptNumber: 'REC-006',
-    receiptDate: '2026-09-23',
-    receivedQuantity: 75,
-    receivedAmount: 75000,
-    receiptAmount: 75000,
-    invoiceNumber: 'INV-00501',
-    invoiceDate: '2026-09-24',
-    invoiceQuantity: 75,
-    invoiceUnitPrice: 1000,
-    invoiceAmount: 75000,
-    amountToPay: 75000,
-    reconciliationStatus: 'Matched',
-    quantityMatchStatus: 'MATCHED',
-    priceMatchStatus: 'MATCHED',
-    amountMatchStatus: 'MATCHED',
-    taxMatchStatus: 'MATCHED',
-    overallResult: 'MATCHED',
-    invoiceBaseAmount: 75000,
-    taxPercentage: 18,
-    calculatedTaxAmount: 13500,
-    taxAmount: 13500,
-    taxVariance: 0
-  }
-];
-
 const statusOptions: Array<'Pending' | 'Payment Due' | 'Paid' | 'On Hold' | 'Cancelled'> = [
   'Pending',
   'Payment Due',
@@ -234,7 +90,7 @@ const Payments: React.FC = () => {
   const accountTypeRaw = (user?.accountType || '').toLowerCase().trim();
   const isSupplier = accountTypeRaw.includes('supplier');
 
-  const [payments, setPayments] = useState<PaymentRecord[]>(isSupplier ? DEFAULT_SUPPLIER_PAYMENTS : []);
+  const [payments, setPayments] = useState<PaymentRecord[]>([]);
   const [selectedPaymentId, setSelectedPaymentId] = useState<string>('');
   const [viewMode, setViewMode] = useState<'table' | 'detail'>(isSupplier ? 'table' : 'detail');
   const [loading, setLoading] = useState<boolean>(true);
@@ -260,22 +116,14 @@ const Payments: React.FC = () => {
           return exists ? prev : res.data[0].id;
         });
       } else {
-        if (isSupplier) {
-          setPayments(DEFAULT_SUPPLIER_PAYMENTS);
-          setSelectedPaymentId(DEFAULT_SUPPLIER_PAYMENTS[0].id);
-        } else {
-          setPayments([]);
-          setSelectedPaymentId('');
-        }
+        setPayments([]);
+        setSelectedPaymentId('');
       }
     } catch (err: any) {
       console.error('Error fetching payments:', err);
-      if (isSupplier) {
-        setPayments(DEFAULT_SUPPLIER_PAYMENTS);
-        setSelectedPaymentId(DEFAULT_SUPPLIER_PAYMENTS[0].id);
-      } else {
-        setError(err.response?.data?.message || 'Failed to load payments.');
-      }
+      setPayments([]);
+      setSelectedPaymentId('');
+      setError(err.response?.data?.message || 'Failed to load payments.');
     } finally {
       setLoading(false);
     }
@@ -285,9 +133,44 @@ const Payments: React.FC = () => {
     payments.find(p => p.id === selectedPaymentId || p.paymentId === selectedPaymentId) ||
     (payments.length > 0 ? payments[0] : undefined);
 
-  const formatCurrency = (val: number | undefined | null) => {
+  const getCurrencySymbol = (currencyCode?: string) => {
+    const code = (currencyCode || selectedPayment?.currency || 'INR').trim().toUpperCase();
+    switch (code) {
+      case 'INR':
+        return '₹';
+      case 'USD':
+        return '$';
+      case 'EUR':
+        return '€';
+      case 'GBP':
+        return '£';
+      default:
+        return `${code} `;
+    }
+  };
+
+  const getCurrencyDisplay = (currencyCode?: string) => {
+    const code = (currencyCode || selectedPayment?.currency || 'INR').trim().toUpperCase();
+    switch (code) {
+      case 'INR':
+        return 'INR (₹)';
+      case 'USD':
+        return 'USD ($)';
+      case 'EUR':
+        return 'EUR (€)';
+      case 'GBP':
+        return 'GBP (£)';
+      default:
+        return code;
+    }
+  };
+
+  const formatCurrency = (val: number | undefined | null, currencyCode?: string) => {
     const num = Number(val || 0);
-    return `₹${num.toLocaleString('en-IN', {
+    const code = (currencyCode || selectedPayment?.currency || 'INR').trim().toUpperCase();
+    const sym = getCurrencySymbol(code);
+    const locale = code === 'INR' ? 'en-IN' : 'en-US';
+    return `${sym}${num.toLocaleString(locale, {
       minimumFractionDigits: num % 1 === 0 ? 0 : 2,
       maximumFractionDigits: 2
     })}`;
@@ -552,11 +435,13 @@ const Payments: React.FC = () => {
               <table className="payments-list-table">
                 <thead>
                   <tr>
-                    <th style={{ width: '20%' }}>Payment ID</th>
-                    <th style={{ width: '25%' }}>{isSupplier ? 'Buyer' : 'Supplier'}</th>
-                    <th style={{ width: '20%' }}>Invoice</th>
-                    <th style={{ width: '18%' }}>Amount</th>
-                    <th style={{ width: '17%' }}>Status</th>
+                    <th style={{ width: '15%' }}>Payment ID</th>
+                    <th style={{ width: '13%' }}>PO Number</th>
+                    <th style={{ width: '20%' }}>{isSupplier ? 'Buyer' : 'Supplier'}</th>
+                    <th style={{ width: '15%' }}>Invoice</th>
+                    <th style={{ width: '11%' }}>Currency</th>
+                    <th style={{ width: '14%' }}>Amount</th>
+                    <th style={{ width: '12%' }}>Status</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -578,14 +463,20 @@ const Payments: React.FC = () => {
                             </svg>
                           </button>
                         </td>
+                        <td style={{ fontWeight: '600', color: 'var(--accent-primary)', fontFamily: 'monospace', fontSize: '0.95rem' }}>
+                          {p.poNumber || '—'}
+                        </td>
                         <td style={{ fontWeight: '600', color: 'var(--text-primary)' }}>
                           {isSupplier ? (p.buyerName || 'XYZ Manufacturing') : (p.supplierName || 'ABC Technologies Pvt Ltd')}
                         </td>
                         <td style={{ color: 'var(--text-secondary)', fontFamily: 'monospace', fontSize: '0.95rem', fontWeight: '500' }}>
                           {p.invoiceNumber || 'INV-00456'}
                         </td>
+                        <td style={{ fontWeight: '600', color: 'var(--text-secondary)', fontSize: '0.88rem' }}>
+                          {getCurrencyDisplay(p.currency)}
+                        </td>
                         <td style={{ fontWeight: '700', color: 'var(--text-primary)', fontSize: '0.95rem' }}>
-                          {formatCurrency(p.amountToPay || p.invoiceAmount || p.poAmount)}
+                          {formatCurrency(p.amountToPay || p.invoiceAmount || p.poAmount, p.currency)}
                         </td>
                         <td>
                           <span className={`badge ${getStatusBadgeClass(p.paymentStatus)}`} style={{ fontSize: '0.78rem', padding: '0.25rem 0.65rem' }}>
@@ -597,7 +488,7 @@ const Payments: React.FC = () => {
                   })}
                   {filteredPayments.length === 0 && (
                     <tr>
-                      <td colSpan={5} style={{ textAlign: 'center', padding: '2.5rem', color: 'var(--text-secondary)' }}>
+                      <td colSpan={7} style={{ textAlign: 'center', padding: '2.5rem', color: 'var(--text-secondary)' }}>
                         No payments found matching your filter criteria.
                       </td>
                     </tr>
@@ -709,7 +600,7 @@ const Payments: React.FC = () => {
                         {isSupplier ? (p.buyerName || 'Buyer') : (p.supplierName || 'Supplier')}
                       </span>
                       <div style={{ display: 'flex', justifyContent: 'space-between', width: '100%', fontSize: '0.75rem', marginTop: '0.2rem' }}>
-                        <span style={{ fontWeight: '700', color: 'var(--text-primary)' }}>{formatCurrency(p.amountToPay || p.invoiceAmount || p.poAmount)}</span>
+                        <span style={{ fontWeight: '700', color: 'var(--text-primary)' }}>{formatCurrency(p.amountToPay || p.invoiceAmount || p.poAmount, p.currency)}</span>
                         {isPException && <span style={{ color: 'var(--error)', fontSize: '0.7rem', fontWeight: '600' }}>⚠ Exception</span>}
                       </div>
                     </button>
@@ -809,6 +700,13 @@ const Payments: React.FC = () => {
                       <span className="payment-stat-label">Invoice</span>
                       <div className="payment-stat-val">
                         {selectedPayment.invoiceNumber || 'INV-2026-00456'}
+                      </div>
+                    </div>
+
+                    <div className="payment-summary-stat-box">
+                      <span className="payment-stat-label">Currency</span>
+                      <div className="payment-stat-val">
+                        {getCurrencyDisplay(selectedPayment.currency)}
                       </div>
                     </div>
 
@@ -1289,7 +1187,7 @@ const Payments: React.FC = () => {
                           <button
                             id="payment-approve-btn"
                             onClick={handleApprovePayment}
-                            disabled={updating || selectedPayment.paymentStatus === 'Paid'}
+                            disabled={updating || selectedPayment.paymentStatus === 'Paid' || selectedPayment.paymentStatus === 'Payment Due'}
                             className="btn btn-primary"
                           >
                             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">

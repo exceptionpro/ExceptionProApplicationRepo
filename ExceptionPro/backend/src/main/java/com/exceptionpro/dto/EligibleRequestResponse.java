@@ -16,17 +16,23 @@ public class EligibleRequestResponse {
     private BigDecimal totalAmount;
     private String currencyType = "USD";
     private int itemCount;
+    private int totalQuantity;
     private LocalDate needByDate;
 
     public EligibleRequestResponse() {}
 
     public EligibleRequestResponse(UUID id, String requestType, String code, String title, UUID buyerId,
                                    String buyerName, String buyerEmail, BigDecimal totalAmount, int itemCount, LocalDate needByDate) {
-        this(id, requestType, code, title, buyerId, buyerName, buyerEmail, totalAmount, "USD", itemCount, needByDate);
+        this(id, requestType, code, title, buyerId, buyerName, buyerEmail, totalAmount, "USD", itemCount, itemCount, needByDate);
     }
 
     public EligibleRequestResponse(UUID id, String requestType, String code, String title, UUID buyerId,
                                    String buyerName, String buyerEmail, BigDecimal totalAmount, String currencyType, int itemCount, LocalDate needByDate) {
+        this(id, requestType, code, title, buyerId, buyerName, buyerEmail, totalAmount, currencyType, itemCount, itemCount, needByDate);
+    }
+
+    public EligibleRequestResponse(UUID id, String requestType, String code, String title, UUID buyerId,
+                                   String buyerName, String buyerEmail, BigDecimal totalAmount, String currencyType, int itemCount, int totalQuantity, LocalDate needByDate) {
         this.id = id;
         this.requestType = requestType;
         this.code = code;
@@ -37,6 +43,7 @@ public class EligibleRequestResponse {
         this.totalAmount = totalAmount;
         this.currencyType = currencyType != null && !currencyType.isBlank() ? currencyType : "USD";
         this.itemCount = itemCount;
+        this.totalQuantity = totalQuantity;
         this.needByDate = needByDate;
     }
 
@@ -110,6 +117,14 @@ public class EligibleRequestResponse {
 
     public void setItemCount(int itemCount) {
         this.itemCount = itemCount;
+    }
+
+    public int getTotalQuantity() {
+        return totalQuantity;
+    }
+
+    public void setTotalQuantity(int totalQuantity) {
+        this.totalQuantity = totalQuantity;
     }
 
     public LocalDate getNeedByDate() {

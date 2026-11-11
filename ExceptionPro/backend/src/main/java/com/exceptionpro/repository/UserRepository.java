@@ -36,4 +36,7 @@ public interface UserRepository extends JpaRepository<User, UUID> {
 
     @Query("SELECT u FROM User u LEFT JOIN FETCH u.individualProfile LEFT JOIN FETCH u.corporateProfile WHERE LOWER(u.accountType) = 'supplier' OR LOWER(u.accountType) = 'buyer and supplier'")
     List<User> findSuppliers();
+
+    @Query("SELECT u FROM User u LEFT JOIN FETCH u.individualProfile LEFT JOIN FETCH u.corporateProfile WHERE u.role IS NULL OR u.role <> 'ROLE_ADMIN'")
+    List<User> findAllNonAdminUsersWithProfiles();
 }

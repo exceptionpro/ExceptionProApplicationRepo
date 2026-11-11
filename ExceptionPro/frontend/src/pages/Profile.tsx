@@ -685,7 +685,7 @@ const Profile: React.FC = () => {
 
       const myEmail = (user?.email || '').toLowerCase().trim();
       // Filter strictly by current user email or name matching (case-insensitive)
-      const userPosts = allPosts.filter(p => 
+      const userPosts = allPosts.filter(p =>
         (p.userEmail && p.userEmail.toLowerCase().trim() === myEmail) ||
         (p.userName && p.userName.toLowerCase().trim() === myEmail) ||
         (p.userId && p.userId.toLowerCase().trim() === myEmail)
@@ -750,7 +750,7 @@ const Profile: React.FC = () => {
       const targetPostId = params.get('postId') || (location.hash ? location.hash.replace('#post-', '') : null);
 
       const targetEmail = (email || '').toLowerCase().trim();
-      const userPosts = allPosts.filter(p => 
+      const userPosts = allPosts.filter(p =>
         (p.userEmail && p.userEmail.toLowerCase().trim() === targetEmail) ||
         (p.userName && p.userName.toLowerCase().trim() === targetEmail) ||
         (p.userId && p.userId.toLowerCase().trim() === targetEmail)
@@ -1109,10 +1109,10 @@ const Profile: React.FC = () => {
           headers: { 'Content-Type': 'multipart/form-data' }
         });
         const fileUrl = uploadRes.data.fileUrl;
-        
+
         let updatedCover = coverPhoto;
         let updatedProfile = profilePicture;
-        
+
         if (type === 'cover') {
           updatedCover = fileUrl;
           setCoverPhoto(fileUrl);
@@ -1120,7 +1120,7 @@ const Profile: React.FC = () => {
           updatedProfile = fileUrl;
           setProfilePicture(fileUrl);
         }
-        
+
         // Save immediately
         const payload: any = {};
         if (profile?.accountType === 'Individual') {
@@ -1139,7 +1139,7 @@ const Profile: React.FC = () => {
         }
         payload.coverPhoto = updatedCover;
         payload.profilePicture = updatedProfile;
-        
+
         await api.put('/api/users/me', payload);
         setSuccess(`${type === 'cover' ? 'Cover' : 'Profile'} photo updated successfully!`);
         fetchProfile();
@@ -1173,7 +1173,7 @@ const Profile: React.FC = () => {
       }
       payload.coverPhoto = '';
       payload.profilePicture = profilePicture;
-      
+
       await api.put('/api/users/me', payload);
       setSuccess('Cover photo removed successfully!');
       fetchProfile();
@@ -1205,7 +1205,7 @@ const Profile: React.FC = () => {
       }
       payload.coverPhoto = coverPhoto;
       payload.profilePicture = '';
-      
+
       await api.put('/api/users/me', payload);
       setSuccess('Profile photo removed successfully!');
       fetchProfile();
@@ -1529,178 +1529,375 @@ const Profile: React.FC = () => {
               </div>
               <div style={{ height: '40px' }}></div>
 
-              <form onSubmit={handleSave}>
-                <div className="form-row">
-                  <div className="form-group half-width">
-                    <label className="form-label">Email Address</label>
-                    <input type="text" className="form-input" value={profile.email} disabled style={{ opacity: 0.6 }} />
+              {isOtherProfile ? (
+                <div className="user-profile-readonly-wrapper">
+                  {/* Account Overview: Email Address & Account Classification */}
+                  <div className="user-profile-overview-grid">
+                    <div className="user-profile-field-card">
+                      <div className="user-profile-field-icon">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path>
+                          <polyline points="22,6 12,13 2,6"></polyline>
+                        </svg>
+                      </div>
+                      <div className="user-profile-field-content">
+                        <span className="user-profile-field-label">Email Address</span>
+                        <span className="user-profile-field-value">{profile.email}</span>
+                      </div>
+                    </div>
+
+                    <div className="user-profile-field-card">
+                      <div className="user-profile-field-icon">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
+                        </svg>
+                      </div>
+                      <div className="user-profile-field-content">
+                        <span className="user-profile-field-label">Account Classification</span>
+                        <span className="user-profile-classification-badge">
+                          {profile.accountType || 'Member'}
+                        </span>
+                      </div>
+                    </div>
                   </div>
 
-                  <div className="form-group half-width">
-                    <label className="form-label">Account Classification</label>
-                    <input type="text" className="form-input" value={profile.accountType} disabled style={{ opacity: 0.6 }} />
+                  <div className="separator" style={{ margin: '0.25rem 0' }}>Profile Details</div>
+
+                  <div className="user-profile-details-card">
+                    {profile.accountType === 'Individual' ? (
+                      <div className="user-profile-details-grid">
+                        <div className="user-profile-field-card">
+                          <div className="user-profile-field-icon">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                              <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+                              <circle cx="12" cy="7" r="4"></circle>
+                            </svg>
+                          </div>
+                          <div className="user-profile-field-content">
+                            <span className="user-profile-field-label">First Name</span>
+                            <span className="user-profile-field-value">{firstName || profile.firstName || 'Not specified'}</span>
+                          </div>
+                        </div>
+
+                        <div className="user-profile-field-card">
+                          <div className="user-profile-field-icon">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                              <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+                              <circle cx="12" cy="7" r="4"></circle>
+                            </svg>
+                          </div>
+                          <div className="user-profile-field-content">
+                            <span className="user-profile-field-label">Last Name</span>
+                            <span className="user-profile-field-value">{lastName || profile.lastName || 'Not specified'}</span>
+                          </div>
+                        </div>
+
+                        <div className="user-profile-field-card">
+                          <div className="user-profile-field-icon">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                              <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
+                              <line x1="16" y1="2" x2="16" y2="6"></line>
+                              <line x1="8" y1="2" x2="8" y2="6"></line>
+                              <line x1="3" y1="10" x2="21" y2="10"></line>
+                            </svg>
+                          </div>
+                          <div className="user-profile-field-content">
+                            <span className="user-profile-field-label">Date of Birth</span>
+                            <span className="user-profile-field-value">{dob || profile.dob || 'Not specified'}</span>
+                          </div>
+                        </div>
+
+                        <div className="user-profile-field-card">
+                          <div className="user-profile-field-icon">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                              <circle cx="12" cy="12" r="10"></circle>
+                              <path d="M12 8v8"></path>
+                              <path d="M8 12h8"></path>
+                            </svg>
+                          </div>
+                          <div className="user-profile-field-content">
+                            <span className="user-profile-field-label">Gender</span>
+                            <span className="user-profile-field-value">{gender || profile.gender || 'Not specified'}</span>
+                          </div>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="user-profile-details-grid">
+                        <div className="user-profile-field-card">
+                          <div className="user-profile-field-icon">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                              <rect x="2" y="7" width="20" height="14" rx="2" ry="2"></rect>
+                              <path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"></path>
+                            </svg>
+                          </div>
+                          <div className="user-profile-field-content">
+                            <span className="user-profile-field-label">Organization Name</span>
+                            <span className="user-profile-field-value">{organizationName || profile.organizationName || 'Not specified'}</span>
+                          </div>
+                        </div>
+
+                        <div className="user-profile-field-card">
+                          <div className="user-profile-field-icon">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                              <polyline points="14 2 14 8 20 8"></polyline>
+                              <line x1="16" y1="13" x2="8" y2="13"></line>
+                              <line x1="16" y1="17" x2="8" y2="17"></line>
+                            </svg>
+                          </div>
+                          <div className="user-profile-field-content">
+                            <span className="user-profile-field-label">Legal Name</span>
+                            <span className="user-profile-field-value">{legalName || profile.legalName || 'Not specified'}</span>
+                          </div>
+                        </div>
+
+                        <div className="user-profile-field-card full-span">
+                          <div className="user-profile-field-icon">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                              <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path>
+                              <circle cx="12" cy="10" r="3"></circle>
+                            </svg>
+                          </div>
+                          <div className="user-profile-field-content">
+                            <span className="user-profile-field-label">Street Address</span>
+                            <span className="user-profile-field-value">{streetAddress || profile.streetAddress || 'Not specified'}</span>
+                          </div>
+                        </div>
+
+                        <div className="user-profile-field-card">
+                          <div className="user-profile-field-icon">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                              <path d="M3 21h18"></path>
+                              <path d="M5 21V7l8-4v18"></path>
+                              <path d="M19 21V11l-6-4"></path>
+                            </svg>
+                          </div>
+                          <div className="user-profile-field-content">
+                            <span className="user-profile-field-label">City</span>
+                            <span className="user-profile-field-value">{city || profile.city || 'Not specified'}</span>
+                          </div>
+                        </div>
+
+                        <div className="user-profile-field-card">
+                          <div className="user-profile-field-icon">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                              <line x1="4" y1="9" x2="20" y2="9"></line>
+                              <line x1="4" y1="15" x2="20" y2="15"></line>
+                              <line x1="10" y1="3" x2="8" y2="21"></line>
+                              <line x1="16" y1="3" x2="14" y2="21"></line>
+                            </svg>
+                          </div>
+                          <div className="user-profile-field-content">
+                            <span className="user-profile-field-label">Pincode</span>
+                            <span className="user-profile-field-value">{pincode || profile.pincode || 'Not specified'}</span>
+                          </div>
+                        </div>
+
+                        <div className="user-profile-field-card">
+                          <div className="user-profile-field-icon">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                              <polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6"></polygon>
+                              <line x1="8" y1="2" x2="8" y2="18"></line>
+                              <line x1="16" y1="6" x2="16" y2="22"></line>
+                            </svg>
+                          </div>
+                          <div className="user-profile-field-content">
+                            <span className="user-profile-field-label">State</span>
+                            <span className="user-profile-field-value">{state || profile.state || 'Not specified'}</span>
+                          </div>
+                        </div>
+
+                        <div className="user-profile-field-card">
+                          <div className="user-profile-field-icon">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                              <circle cx="12" cy="12" r="10"></circle>
+                              <line x1="2" y1="12" x2="22" y2="12"></line>
+                              <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path>
+                            </svg>
+                          </div>
+                          <div className="user-profile-field-content">
+                            <span className="user-profile-field-label">Country</span>
+                            <span className="user-profile-field-value">{country || profile.country || 'Not specified'}</span>
+                          </div>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
-
-                <div className="separator" style={{ margin: '1rem 0 1.5rem 0' }}>Profile Details</div>
-
-                {/* Individual view/edit logic */}
-                {profile.accountType === 'Individual' && (
-                  <div>
-                    <div className="form-row">
-                      <div className="form-group half-width">
-                        <label className="form-label">First Name</label>
-                        <input
-                          type="text"
-                          className="form-input"
-                          value={firstName}
-                          onChange={(e) => setFirstName(e.target.value)}
-                          disabled={!isEditing}
-                        />
-                      </div>
-
-                      <div className="form-group half-width">
-                        <label className="form-label">Last Name</label>
-                        <input
-                          type="text"
-                          className="form-input"
-                          value={lastName}
-                          onChange={(e) => setLastName(e.target.value)}
-                          disabled={!isEditing}
-                        />
-                      </div>
+              ) : (
+                <form onSubmit={handleSave}>
+                  <div className="form-row">
+                    <div className="form-group half-width">
+                      <label className="form-label">Email Address</label>
+                      <input type="text" className="form-input" value={profile.email} disabled style={{ opacity: 0.6 }} />
                     </div>
 
-                    <div className="form-row">
-                      <div className="form-group half-width">
-                        <label className="form-label">Date of Birth</label>
-                        <input
-                          type="date"
-                          className="form-input"
-                          value={dob}
-                          onChange={(e) => setDob(e.target.value)}
-                          disabled={!isEditing}
-                        />
-                      </div>
-
-                      <div className="form-group half-width">
-                        <label className="form-label">Gender</label>
-                        <select
-                          className="form-input"
-                          style={{ appearance: isEditing ? 'auto' : 'none', background: 'var(--bg-secondary)', color: 'var(--text-primary)' }}
-                          value={gender}
-                          onChange={(e) => setGender(e.target.value)}
-                          disabled={!isEditing}
-                        >
-                          <option value="Male">Male</option>
-                          <option value="Female">Female</option>
-                          <option value="Other">Other</option>
-                        </select>
-                      </div>
+                    <div className="form-group half-width">
+                      <label className="form-label">Account Classification</label>
+                      <input type="text" className="form-input" value={profile.accountType} disabled style={{ opacity: 0.6 }} />
                     </div>
                   </div>
-                )}
 
-                {/* Corporate view/edit logic */}
-                {profile.accountType !== 'Individual' && (
-                  <div>
-                    <div className="form-row">
-                      <div className="form-group half-width">
-                        <label className="form-label">Organization Name</label>
-                        <input
-                          type="text"
-                          className="form-input"
-                          value={organizationName}
-                          onChange={(e) => setOrganizationName(e.target.value)}
-                          disabled={!isEditing}
-                        />
+                  <div className="separator" style={{ margin: '1rem 0 1.5rem 0' }}>Profile Details</div>
+
+                  {/* Individual view/edit logic */}
+                  {profile.accountType === 'Individual' && (
+                    <div>
+                      <div className="form-row">
+                        <div className="form-group half-width">
+                          <label className="form-label">First Name</label>
+                          <input
+                            type="text"
+                            className="form-input"
+                            value={firstName}
+                            onChange={(e) => setFirstName(e.target.value)}
+                            disabled={!isEditing}
+                          />
+                        </div>
+
+                        <div className="form-group half-width">
+                          <label className="form-label">Last Name</label>
+                          <input
+                            type="text"
+                            className="form-input"
+                            value={lastName}
+                            onChange={(e) => setLastName(e.target.value)}
+                            disabled={!isEditing}
+                          />
+                        </div>
                       </div>
 
-                      <div className="form-group half-width">
-                        <label className="form-label">Legal Name</label>
-                        <input
-                          type="text"
-                          className="form-input"
-                          value={legalName}
-                          onChange={(e) => setLegalName(e.target.value)}
-                          disabled={!isEditing}
-                        />
-                      </div>
-                    </div>
+                      <div className="form-row">
+                        <div className="form-group half-width">
+                          <label className="form-label">Date of Birth</label>
+                          <input
+                            type="date"
+                            className="form-input"
+                            value={dob}
+                            onChange={(e) => setDob(e.target.value)}
+                            disabled={!isEditing}
+                          />
+                        </div>
 
-                    <div className="form-group">
-                      <label className="form-label">Street Address</label>
-                      <input
-                        type="text"
-                        className="form-input"
-                        value={streetAddress}
-                        onChange={(e) => setStreetAddress(e.target.value)}
-                        disabled={!isEditing}
-                      />
-                    </div>
-
-                    <div className="form-row">
-                      <div className="form-group half-width">
-                        <label className="form-label">City</label>
-                        <input
-                          type="text"
-                          className="form-input"
-                          value={city}
-                          onChange={(e) => setCity(e.target.value)}
-                          disabled={!isEditing}
-                        />
-                      </div>
-
-                      <div className="form-group half-width">
-                        <label className="form-label">Pincode</label>
-                        <input
-                          type="text"
-                          className="form-input"
-                          value={pincode}
-                          onChange={(e) => setPincode(e.target.value)}
-                          disabled={!isEditing}
-                        />
+                        <div className="form-group half-width">
+                          <label className="form-label">Gender</label>
+                          <select
+                            className="form-input"
+                            style={{ appearance: isEditing ? 'auto' : 'none', background: 'var(--bg-secondary)', color: 'var(--text-primary)' }}
+                            value={gender}
+                            onChange={(e) => setGender(e.target.value)}
+                            disabled={!isEditing}
+                          >
+                            <option value="Male">Male</option>
+                            <option value="Female">Female</option>
+                            <option value="Other">Other</option>
+                          </select>
+                        </div>
                       </div>
                     </div>
+                  )}
 
-                    <div className="form-row">
-                      <div className="form-group half-width">
-                        <label className="form-label">State</label>
+                  {/* Corporate view/edit logic */}
+                  {profile.accountType !== 'Individual' && (
+                    <div>
+                      <div className="form-row">
+                        <div className="form-group half-width">
+                          <label className="form-label">Organization Name</label>
+                          <input
+                            type="text"
+                            className="form-input"
+                            value={organizationName}
+                            onChange={(e) => setOrganizationName(e.target.value)}
+                            disabled={!isEditing}
+                          />
+                        </div>
+
+                        <div className="form-group half-width">
+                          <label className="form-label">Legal Name</label>
+                          <input
+                            type="text"
+                            className="form-input"
+                            value={legalName}
+                            onChange={(e) => setLegalName(e.target.value)}
+                            disabled={!isEditing}
+                          />
+                        </div>
+                      </div>
+
+                      <div className="form-group">
+                        <label className="form-label">Street Address</label>
                         <input
                           type="text"
                           className="form-input"
-                          value={state}
-                          onChange={(e) => setState(e.target.value)}
+                          value={streetAddress}
+                          onChange={(e) => setStreetAddress(e.target.value)}
                           disabled={!isEditing}
                         />
                       </div>
 
-                      <div className="form-group half-width">
-                        <label className="form-label">Country</label>
-                        <select
-                          className="form-input"
-                          style={{ appearance: isEditing ? 'auto' : 'none', background: 'var(--bg-secondary)', color: 'var(--text-primary)' }}
-                          value={country}
-                          onChange={(e) => setCountry(e.target.value)}
-                          disabled={!isEditing}
-                        >
-                          {countries.map((c) => (
-                            <option key={c} value={c}>{c}</option>
-                          ))}
-                        </select>
+                      <div className="form-row">
+                        <div className="form-group half-width">
+                          <label className="form-label">City</label>
+                          <input
+                            type="text"
+                            className="form-input"
+                            value={city}
+                            onChange={(e) => setCity(e.target.value)}
+                            disabled={!isEditing}
+                          />
+                        </div>
+
+                        <div className="form-group half-width">
+                          <label className="form-label">Pincode</label>
+                          <input
+                            type="text"
+                            className="form-input"
+                            value={pincode}
+                            onChange={(e) => setPincode(e.target.value)}
+                            disabled={!isEditing}
+                          />
+                        </div>
+                      </div>
+
+                      <div className="form-row">
+                        <div className="form-group half-width">
+                          <label className="form-label">State</label>
+                          <input
+                            type="text"
+                            className="form-input"
+                            value={state}
+                            onChange={(e) => setState(e.target.value)}
+                            disabled={!isEditing}
+                          />
+                        </div>
+
+                        <div className="form-group half-width">
+                          <label className="form-label">Country</label>
+                          <select
+                            className="form-input"
+                            style={{ appearance: isEditing ? 'auto' : 'none', background: 'var(--bg-secondary)', color: 'var(--text-primary)' }}
+                            value={country}
+                            onChange={(e) => setCountry(e.target.value)}
+                            disabled={!isEditing}
+                          >
+                            {countries.map((c) => (
+                              <option key={c} value={c}>{c}</option>
+                            ))}
+                          </select>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                )}
+                  )}
 
-                {isEditing && (
-                  <button type="submit" className="btn-primary" style={{ marginTop: '2rem' }}>Save Changes</button>
-                )}
-              </form>
+                  {isEditing && (
+                    <button type="submit" className="btn-primary" style={{ marginTop: '2rem' }}>Save Changes</button>
+                  )}
+                </form>
+              )}
 
               {/* About Section */}
               <div className="separator" style={{ margin: '2.5rem 0 1.5rem 0' }}>About</div>
-              
+
               <div style={{ background: 'var(--bg-secondary)', padding: '1.5rem', borderRadius: '10px', border: '1px solid var(--border-color)', position: 'relative' }}>
                 {isEditingAbout ? (
                   <div>
@@ -1760,7 +1957,7 @@ const Profile: React.FC = () => {
                         No about details added yet.
                       </p>
                     )}
-                    
+
                     {!isOtherProfile && (
                       <div style={{ display: 'flex', gap: '0.5rem', marginTop: '1rem' }}>
                         <button

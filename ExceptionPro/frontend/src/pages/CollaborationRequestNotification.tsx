@@ -45,6 +45,7 @@ interface CollaborationRequisitionData {
   purchaseOrderGenerated?: boolean;
   suppliers?: Array<{ id: string; email: string; name: string }>;
   acceptedSuppliers?: Array<{ id: string; email: string; name: string }>;
+  declinedSuppliers?: Array<{ id: string; email: string; name: string }>;
 }
 
 const CollaborationRequestNotificationPage: React.FC = () => {
@@ -67,6 +68,53 @@ const CollaborationRequestNotificationPage: React.FC = () => {
       return true;
     }
     return Boolean(req.purchaseOrderGenerated && req.status === 'Purchase Order Generated');
+  };
+
+  const hasSupplierResponded = (req: CollaborationRequisitionData): boolean => {
+    if (
+      req.currentSupplierStatus === 'Accepted' ||
+      req.currentSupplierStatus === 'Declined' ||
+      req.currentSupplierStatus === 'Proposal Submitted'
+    ) {
+      return true;
+    }
+
+    if (req.status === 'Accepted' || req.status === 'Declined') {
+      return true;
+    }
+
+    const myEmail = (user?.email || localStorage.getItem('email') || '').toLowerCase();
+    const myId = (user as any)?.id ? String((user as any).id).toLowerCase() : '';
+
+    if (req.acceptedSuppliers && req.acceptedSuppliers.length > 0) {
+      const isInAccepted = req.acceptedSuppliers.some(
+        (s) =>
+          (myEmail && s.email && s.email.toLowerCase() === myEmail) ||
+          (myId && s.id && String(s.id).toLowerCase() === myId)
+      );
+      if (isInAccepted) return true;
+    }
+
+    if (req.declinedSuppliers && req.declinedSuppliers.length > 0) {
+      const isInDeclined = req.declinedSuppliers.some(
+        (s) =>
+          (myEmail && s.email && s.email.toLowerCase() === myEmail) ||
+          (myId && s.id && String(s.id).toLowerCase() === myId)
+      );
+      if (isInDeclined) return true;
+    }
+
+    if (req.proposals && req.proposals.length > 0) {
+      if (!myEmail && !myId) return true;
+      const hasMyProposal = req.proposals.some(
+        (p) =>
+          (myEmail && p.supplierEmail && p.supplierEmail.toLowerCase() === myEmail) ||
+          (myId && p.supplierId && String(p.supplierId).toLowerCase() === myId)
+      );
+      if (hasMyProposal) return true;
+    }
+
+    return false;
   };
 
   // Accept Modal State
@@ -412,6 +460,12 @@ const CollaborationRequestNotificationPage: React.FC = () => {
                   {/* Action Buttons: Accept, Decline, Proposal, View Items */}
                   {(() => {
                     const isPoGen = checkIsPoGenerated(req);
+                    const isResponded = hasSupplierResponded(req);
+                    const isActionDisabled = isPoGen || isResponded;
+                    const disabledReason = isPoGen
+                      ? 'Purchase Order has already been generated'
+                      : 'You have already responded to this collaboration request';
+
                     return (
                       <div
                         style={{
@@ -426,59 +480,62 @@ const CollaborationRequestNotificationPage: React.FC = () => {
                       >
                         <button
                           className="btn"
-                          disabled={isPoGen}
+                          disabled={isActionDisabled}
                           style={{
                             padding: '0.45rem 1.25rem',
                             fontSize: '0.85rem',
-                            background: isPoGen ? 'var(--bg-tertiary, #4b5563)' : '#10b981',
-                            color: isPoGen ? 'var(--text-muted, #9ca3af)' : '#fff',
-                            border: isPoGen ? '1px solid var(--border-color, #6b7280)' : 'none',
+                            background: '#10b981',
+                            color: '#fff',
+                            border: 'none',
                             borderRadius: '6px',
-                            cursor: isPoGen ? 'not-allowed' : 'pointer',
+                            cursor: isActionDisabled ? 'not-allowed' : 'pointer',
                             fontWeight: 600,
-                            opacity: isPoGen ? 0.6 : 1,
+                            opacity: isActionDisabled ? 0.45 : 1,
+                            filter: isActionDisabled ? 'saturate(70%) brightness(0.85)' : 'none',
                           }}
-                          onClick={() => !isPoGen && handleOpenAcceptModal(req)}
-                          title={isPoGen ? 'Purchase Order has already been generated' : 'Accept Request'}
+                          onClick={() => !isActionDisabled && handleOpenAcceptModal(req)}
+                          title={isActionDisabled ? disabledReason : 'Accept Request'}
                         >
                           Accept
                         </button>
                         <button
                           className="btn"
-                          disabled={isPoGen}
+                          disabled={isActionDisabled}
                           style={{
                             padding: '0.45rem 1.25rem',
                             fontSize: '0.85rem',
-                            background: isPoGen ? 'var(--bg-tertiary, #4b5563)' : '#ef4444',
-                            color: isPoGen ? 'var(--text-muted, #9ca3af)' : '#fff',
-                            border: isPoGen ? '1px solid var(--border-color, #6b7280)' : 'none',
+                            background: '#ef4444',
+                            color: '#fff',
+                            border: 'none',
                             borderRadius: '6px',
-                            cursor: isPoGen ? 'not-allowed' : 'pointer',
+                            cursor: isActionDisabled ? 'not-allowed' : 'pointer',
                             fontWeight: 600,
-                            opacity: isPoGen ? 0.6 : 1,
+                            opacity: isActionDisabled ? 0.45 : 1,
+                            filter: isActionDisabled ? 'saturate(70%) brightness(0.85)' : 'none',
                           }}
-                          onClick={() => !isPoGen && handleOpenDeclineModal(req)}
-                          title={isPoGen ? 'Purchase Order has already been generated' : 'Decline Request'}
+                          onClick={() => !isActionDisabled && handleOpenDeclineModal(req)}
+                          title={isActionDisabled ? disabledReason : 'Decline Request'}
                         >
                           Decline
                         </button>
                         <button
                           className="btn btn-secondary"
-                          disabled={isPoGen}
+                          disabled={isActionDisabled}
                           style={{
                             padding: '0.45rem 1.25rem',
                             fontSize: '0.85rem',
                             width: 'auto',
                             margin: 0,
                             fontWeight: 600,
-                            background: isPoGen ? 'var(--bg-tertiary, #4b5563)' : 'var(--accent-glow)',
-                            color: isPoGen ? 'var(--text-muted, #9ca3af)' : 'var(--accent-primary)',
-                            borderColor: isPoGen ? 'var(--border-color, #6b7280)' : 'var(--accent-primary)',
-                            cursor: isPoGen ? 'not-allowed' : 'pointer',
-                            opacity: isPoGen ? 0.6 : 1,
+                            background: 'var(--accent-glow)',
+                            color: 'var(--accent-primary)',
+                            borderColor: 'var(--accent-primary)',
+                            cursor: isActionDisabled ? 'not-allowed' : 'pointer',
+                            opacity: isActionDisabled ? 0.45 : 1,
+                            filter: isActionDisabled ? 'saturate(70%) brightness(0.85)' : 'none',
                           }}
-                          onClick={() => !isPoGen && handleOpenProposalModal(req)}
-                          title={isPoGen ? 'Purchase Order has already been generated' : 'Submit Proposal'}
+                          onClick={() => !isActionDisabled && handleOpenProposalModal(req)}
+                          title={isActionDisabled ? disabledReason : 'Submit Proposal'}
                         >
                           Proposal
                         </button>

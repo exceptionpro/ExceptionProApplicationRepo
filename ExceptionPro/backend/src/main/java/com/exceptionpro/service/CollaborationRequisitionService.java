@@ -284,6 +284,10 @@ public class CollaborationRequisitionService {
             throw new IllegalArgumentException("Cannot accept request: Purchase Order has already been generated.");
         }
 
+        if (hasSupplierAlreadyResponded(req.getId(), supplier)) {
+            throw new IllegalArgumentException("You have already responded to this collaboration requisition.");
+        }
+
         req.setStatus("Accepted");
         CollaborationRequisition saved = collaborationRequisitionRepository.save(req);
 
@@ -350,6 +354,10 @@ public class CollaborationRequisitionService {
                 ));
         if (poExists || "Purchase Order Generated".equalsIgnoreCase(req.getStatus())) {
             throw new IllegalArgumentException("Cannot decline request: Purchase Order has already been generated.");
+        }
+
+        if (hasSupplierAlreadyResponded(req.getId(), supplier)) {
+            throw new IllegalArgumentException("You have already responded to this collaboration requisition.");
         }
 
         req.setStatus("Declined");
@@ -766,6 +774,10 @@ public class CollaborationRequisitionService {
             throw new IllegalArgumentException("Cannot submit proposal: Purchase Order has already been generated.");
         }
 
+        if (hasSupplierAlreadyResponded(req.getId(), supplier)) {
+            throw new IllegalArgumentException("You have already responded to this collaboration requisition.");
+        }
+
         if (proposalText == null || proposalText.trim().isEmpty()) {
             throw new IllegalArgumentException("Proposal comments are required");
         }
@@ -1076,6 +1088,11 @@ public class CollaborationRequisitionService {
             if (supplierResp.isPresent()) {
                 resp.setCurrentSupplierStatus(supplierResp.get().getStatus());
                 resp.setStatus(supplierResp.get().getStatus());
+            } else if (resp.getProposals() != null && !resp.getProposals().isEmpty()) {
+                resp.setCurrentSupplierStatus("Proposal Submitted");
+                if ("Purchase Order Generated".equalsIgnoreCase(resp.getStatus())) {
+                    resp.setStatus("Collaborating");
+                }
             } else {
                 resp.setCurrentSupplierStatus("Pending from Buyer");
                 if ("Purchase Order Generated".equalsIgnoreCase(resp.getStatus())) {
@@ -1085,6 +1102,34 @@ public class CollaborationRequisitionService {
         }
 
         return resp;
+    }
+
+    private boolean hasSupplierAlreadyResponded(UUID collabReqId, User supplier) {
+        if (collabReqId == null || supplier == null || supplier.getId() == null) {
+            return false;
+        }
+        Optional<CollaborationSupplierResponse> existingResp = collaborationSupplierResponseRepository
+                .findByCollaborationRequisitionIdAndSupplierId(collabReqId, supplier.getId());
+        if (existingResp.isPresent() && existingResp.get().getStatus() != null) {
+            String st = existingResp.get().getStatus();
+            if ("Accepted".equalsIgnoreCase(st) || "Declined".equalsIgnoreCase(st) || "Purchase Order Generated".equalsIgnoreCase(st)) {
+                return true;
+            }
+        }
+        List<CollaborationProposal> existingProposals = collaborationProposalRepository
+                .findByCollaborationRequisitionIdOrderByCreatedAtDesc(collabReqId);
+        if (existingProposals != null) {
+            boolean hasProposal = existingProposals.stream().anyMatch(p ->
+                    p != null && p.getSupplier() != null && (
+                            (p.getSupplier().getId() != null && p.getSupplier().getId().equals(supplier.getId())) ||
+                            (p.getSupplier().getEmail() != null && supplier.getEmail() != null && p.getSupplier().getEmail().equalsIgnoreCase(supplier.getEmail()))
+                    )
+            );
+            if (hasProposal) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private RequisitionResponse mapPoToResponse(Requisition r) {

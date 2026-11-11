@@ -90,6 +90,12 @@ public class InvoiceService {
                             .orElse("USD")
                     : "USD";
 
+            int totalQuantity = r.getItems() != null
+                    ? r.getItems().stream()
+                            .mapToInt(item -> item != null && item.getQuantity() != null ? item.getQuantity() : 0)
+                            .sum()
+                    : 0;
+
             list.add(new EligibleRequestResponse(
                     r.getId(),
                     "STANDARD",
@@ -101,6 +107,7 @@ public class InvoiceService {
                     total,
                     currencyType,
                     r.getItems() != null ? r.getItems().size() : 0,
+                    totalQuantity,
                     r.getNeedByDate()
             ));
         }
@@ -125,6 +132,12 @@ public class InvoiceService {
                                 .orElse("USD")
                         : "USD";
 
+                int totalQuantity = c.getItems() != null
+                        ? c.getItems().stream()
+                                .mapToInt(cItem -> cItem != null && cItem.getQuantity() != null ? cItem.getQuantity() : 0)
+                                .sum()
+                        : 0;
+
                 list.add(new EligibleRequestResponse(
                         c.getId(),
                         "COLLABORATION",
@@ -136,6 +149,7 @@ public class InvoiceService {
                         total,
                         currencyType,
                         c.getItems() != null ? c.getItems().size() : 0,
+                        totalQuantity,
                         c.getNeedByDate()
                 ));
             }
@@ -220,6 +234,10 @@ public class InvoiceService {
                 throw new IllegalArgumentException("Invoices can only be created after the Buyer accepts your proposal. Current status: Pending from Buyer.");
             }
 
+            if (invoiceRepository.existsByCollaborationRequisitionIdAndSupplierId(collab.getId(), supplier.getId())) {
+                throw new IllegalArgumentException("An invoice has already been created for this Purchase Request. You cannot create more than one invoice for the same Purchase Request.");
+            }
+
             invoice.setCollaborationRequisition(collab);
             invoice.setRequestType("COLLABORATION");
             buyer = collab.getBuyer();
@@ -231,6 +249,10 @@ public class InvoiceService {
             }
             Requisition req = requisitionRepository.findById(Objects.requireNonNull(reqId))
                     .orElseThrow(() -> new IllegalArgumentException("Requisition not found"));
+
+            if (invoiceRepository.existsByRequisitionId(req.getId())) {
+                throw new IllegalArgumentException("An invoice has already been created for this Purchase Request. You cannot create more than one invoice for the same Purchase Request.");
+            }
 
             if ("Cancelled".equalsIgnoreCase(req.getStatus())) {
                 throw new IllegalArgumentException("Cannot create invoice for a cancelled Purchase Order");

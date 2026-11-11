@@ -818,6 +818,9 @@ const RequisitionPage: React.FC = () => {
   };
 
   const handleStartCopyPo = (req: RequisitionData) => {
+    if (req.status === 'PR') {
+      return;
+    }
     setError('');
     setSuccess('');
     const cloned: RequisitionData = JSON.parse(JSON.stringify(req));
@@ -1430,9 +1433,10 @@ const RequisitionPage: React.FC = () => {
                         View Items ({req.items?.length || 0})
                       </button>
 
-                      {/* e) Copy PO - Royal Purple / Violet Color */}
+                      {/* e) Copy PO - Royal Purple / Violet Color (Disabled while status is PR) */}
                       <button
                         className="btn"
+                        disabled={req.status === 'PR'}
                         style={{
                           width: '140px',
                           minWidth: '140px',
@@ -1445,14 +1449,20 @@ const RequisitionPage: React.FC = () => {
                           color: '#ffffff',
                           border: 'none',
                           borderRadius: '6px',
-                          cursor: 'pointer',
+                          cursor: req.status === 'PR' ? 'not-allowed' : 'pointer',
                           fontWeight: 600,
                           whiteSpace: 'nowrap',
                           flexShrink: 0,
                           boxSizing: 'border-box',
+                          opacity: req.status === 'PR' ? 0.45 : 1,
+                          filter: req.status === 'PR' ? 'saturate(70%) brightness(0.85)' : 'none',
                         }}
-                        onClick={() => handleStartCopyPo(req)}
-                        title="Copy this Purchase Order to generate a new PO"
+                        onClick={() => req.status !== 'PR' && handleStartCopyPo(req)}
+                        title={
+                          req.status === 'PR'
+                            ? 'Cannot copy: Requisition must be converted to Purchase Order first'
+                            : 'Copy this Purchase Order to generate a new PO'
+                        }
                       >
                         Copy PO
                       </button>

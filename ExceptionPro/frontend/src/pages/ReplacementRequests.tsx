@@ -2136,58 +2136,62 @@ const ReplacementRequests: React.FC = () => {
                       viewingRequest.supplierApprovalStatus &&
                       viewingRequest.supplierApprovalStatus !== 'Pending Approval'
                     );
+                    const isAcceptDisabled = approving || isAlreadyApproved || selectedSupplierAction !== 'Accept Request';
+                    const isPartialDisabled = approving || isAlreadyApproved || selectedSupplierAction !== 'Partially Accept';
+                    const isRejectDisabled = approving || isAlreadyApproved || selectedSupplierAction !== 'Reject Request';
+
                     return (
                       <>
                         <button
                           type="button"
-                          onClick={() => handleSupplierApproval('Accept Request')}
-                          disabled={approving || isAlreadyApproved}
+                          onClick={() => !isAcceptDisabled && handleSupplierApproval('Accept Request')}
+                          disabled={isAcceptDisabled}
                           style={{
-                            background: isAlreadyApproved ? '#94a3b8' : '#16a34a',
+                            background: isAcceptDisabled ? '#94a3b8' : '#16a34a',
                             color: '#ffffff',
                             border: 'none',
                             borderRadius: '6px',
                             padding: '0.6rem 1.15rem',
                             fontWeight: 700,
                             fontSize: '0.85rem',
-                            cursor: approving || isAlreadyApproved ? 'not-allowed' : 'pointer',
-                            opacity: isAlreadyApproved ? 0.6 : 1
+                            cursor: isAcceptDisabled ? 'not-allowed' : 'pointer',
+                            opacity: isAcceptDisabled ? 0.55 : 1
                           }}
                         >
                           Accept Request
                         </button>
                         <button
                           type="button"
-                          onClick={() => handleSupplierApproval('Partially Accept')}
-                          disabled={approving || isAlreadyApproved}
+                          onClick={() => !isPartialDisabled && handleSupplierApproval('Partially Accept')}
+                          disabled={isPartialDisabled}
                           style={{
-                            background: isAlreadyApproved ? '#94a3b8' : '#d97706',
+                            background: isPartialDisabled ? '#94a3b8' : '#d97706',
                             color: '#ffffff',
                             border: 'none',
                             borderRadius: '6px',
                             padding: '0.6rem 1.15rem',
                             fontWeight: 700,
                             fontSize: '0.85rem',
-                            cursor: approving || isAlreadyApproved ? 'not-allowed' : 'pointer',
-                            opacity: isAlreadyApproved ? 0.6 : 1
+                            cursor: isPartialDisabled ? 'not-allowed' : 'pointer',
+                            opacity: isPartialDisabled ? 0.55 : 1
                           }}
                         >
                           Partially Accept
                         </button>
                         <button
                           type="button"
-                          onClick={() => handleSupplierApproval('Reject Request')}
-                          disabled={approving || isAlreadyApproved}
+                          onClick={() => !isRejectDisabled && handleSupplierApproval('Reject Request')}
+                          disabled={isRejectDisabled}
                           style={{
-                            background: isAlreadyApproved ? '#94a3b8' : '#dc2626',
+                            background: isRejectDisabled ? '#94a3b8' : '#dc2626',
                             color: '#ffffff',
                             border: 'none',
                             borderRadius: '6px',
                             padding: '0.6rem 1.15rem',
                             fontWeight: 700,
                             fontSize: '0.85rem',
-                            cursor: approving || isAlreadyApproved ? 'not-allowed' : 'pointer',
-                            opacity: isAlreadyApproved ? 0.6 : 1
+                            cursor: isRejectDisabled ? 'not-allowed' : 'pointer',
+                            opacity: isRejectDisabled ? 0.55 : 1
                           }}
                         >
                           Reject Request
