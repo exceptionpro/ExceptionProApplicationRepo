@@ -258,6 +258,10 @@ public class RequisitionService {
             throw new IllegalArgumentException("You can only copy your own Purchase Orders");
         }
 
+        if ("PR".equalsIgnoreCase(source.getStatus())) {
+            throw new IllegalArgumentException("Cannot copy a Requisition (PR). Please convert it to a Purchase Order (PO) first.");
+        }
+
         // Title resolution:
         // If user changed title (non-blank and not equal to source title), use that title.
         // If user didn't change title (or left it blank), title becomes "copy of " + source.getTitle().

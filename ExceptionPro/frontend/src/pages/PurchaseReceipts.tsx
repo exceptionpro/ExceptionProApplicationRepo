@@ -321,7 +321,7 @@ const PurchaseReceipts: React.FC = () => {
       const pendQty =
         existingReceipt.pendingQuantity !== undefined && existingReceipt.pendingQuantity !== null
           ? existingReceipt.pendingQuantity
-          : poQty !== '' && recQty !== ''
+          : poQty !== undefined && poQty !== null && recQty !== undefined && recQty !== null
             ? Math.max(0, Number(poQty) - Number(recQty))
             : 0;
 
