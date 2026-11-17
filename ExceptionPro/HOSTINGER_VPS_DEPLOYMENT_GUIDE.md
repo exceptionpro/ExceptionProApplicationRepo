@@ -386,16 +386,150 @@ Hostinger KVM VPS has an external **Cloud Firewall** in the Hostinger dashboard 
      - Port **`9090`** (Source: Anywhere `0.0.0.0/0`)
    - Click **Sync** / **Apply** in hPanel.
 
-#### Step 4: Verify Frontend API Base URL & Backend CORS for Browser Requests
-1. **Frontend API URL (`frontend/src/services/api.ts`)**:
-   - If `baseURL` is hardcoded to `'http://localhost:9090'`, opening `http://189.72.153.133` on a remote computer will try to call `localhost:9090` on that user's computer instead of the VPS.
-   - Change `baseURL` in `frontend/src/services/api.ts` to:
-     ```ts
-     baseURL: import.meta.env.VITE_API_URL || '',
-     ```
-     so requests go to `/api/...` on `http://189.72.153.133` and are proxied by Nginx to `backend:9090`.
-2. **Backend CORS (`backend/src/main/java/com/exceptionpro/config/SecurityConfig.java`)**:
-   - Ensure `corsConfigurationSource()` allows `http://189.72.153.133` (or uses `configuration.setAllowedOriginPatterns(List.of("*"))`) so browser requests from the VPS IP or domain are permitted.
+#### Step 4: Important Check for Login/API Calls from Browser (`api.ts` & `SecurityConfig.java`)
+
+Once `http://189.72.153.133` opens in your browser, you can easily switch between **Localhost Mode** and **Hostinger VPS Mode** by commenting/uncommenting the marked lines in `frontend/src/services/api.ts` and `backend/src/main/java/com/exceptionpro/config/SecurityConfig.java`:
+
+##### 1. Frontend API Configuration (`frontend/src/services/api.ts`)
+- When you open `http://189.72.153.133` from your laptop browser, `'http://localhost:9090'` tells your browser to call your laptop instead of the VPS.
+- Setting `baseURL: import.meta.env.VITE_API_URL || ''` makes the frontend call `/api/...` on the same server (`http://189.72.153.133/api/...`), which Nginx automatically forwards to `backend:9090`.
+- **To run in Localhost later**: Simply uncomment `baseURL: 'http://localhost:9090',` and comment out `baseURL: import.meta.env.VITE_API_URL || '',`.
+
+```ts
+import axios from 'axios';
+
+const api = axios.create({
+  // ============================================================================
+  // [LOCALHOST DEVELOPMENT CONFIGURATION]
+  // Uncomment the line below (and comment out the Hostinger VPS line) when running
+  // the frontend locally via `npm run dev` (http://localhost:5173) against the
+  // local Spring Boot backend running on port 9090 (http://localhost:9090):
+  // baseURL: 'http://localhost:9090',
+
+  // [HOSTINGER VPS / DOCKER NGINX PRODUCTION CONFIGURATION]
+  // Uses VITE_API_URL if provided, or '' (relative path `/api/...`) so browser
+  // requests go to the same VPS host (e.g. http://189.72.153.133/api/...) and
+  // are reverse-proxied by Nginx to the Spring Boot backend container (backend:9090):
+  baseURL: import.meta.env.VITE_API_URL || '',
+  // ============================================================================
+  headers: {
+    'Content-Type': 'application/json',
+  },
+});
+
+api.interceptors.request.use(
+  (config) => {
+    const token = localStorage.getItem('token');
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
+    }
+    return config;
+  },
+  (error) => {
+    return Promise.reject(error);
+  }
+);
+
+export default api;
+```
+
+##### 2. Backend CORS Configuration (`backend/src/main/java/com/exceptionpro/config/SecurityConfig.java`)
+- Previously, `setAllowedOrigins` only listed `http://localhost:5173`.
+- Adding `http://189.72.153.133` and `setAllowedOriginPatterns(List.of("*"))` ensures CORS never blocks requests from `http://189.72.153.133` while still supporting `http://localhost:5173`.
+- **To restrict strictly to Localhost later**: Uncomment `configuration.setAllowedOrigins(List.of("http://localhost:5173"));` and comment out the Hostinger VPS block.
+
+```java
+    @Bean
+    public CorsConfigurationSource corsConfigurationSource() {
+        CorsConfiguration configuration = new CorsConfiguration();
+
+        // ============================================================================
+        // [LOCALHOST DEVELOPMENT CONFIGURATION]
+        // Uncomment the line below (and comment out the Hostinger VPS configuration)
+        // if you want to restrict CORS strictly to the local Vite dev server:
+        // configuration.setAllowedOrigins(List.of("http://localhost:5173")); // Vite dev frontend URL
+
+        // [HOSTINGER VPS + LOCALHOST CONFIGURATION]
+        // Allows requests from both Hostinger VPS (http://189.72.153.133), local Vite
+        // dev server (http://localhost:5173), and any configured domain/origin pattern:
+        configuration.setAllowedOrigins(List.of(
+            "http://localhost:5173",
+            "http://localhost",
+            "http://189.72.153.133",
+            "http://189.72.153.133:80",
+            "http://189.72.153.133:9090"
+        ));
+        configuration.setAllowedOriginPatterns(List.of("*"));
+        // ============================================================================
+
+        configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "OPTIONS"));
+        configuration.setAllowedHeaders(Arrays.asList("Authorization", "Content-Type", "Cache-Control"));
+        configuration.setAllowCredentials(true);
+        UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
+        source.registerCorsConfiguration("/**", configuration);
+        return source;
+    }
+```
+#### Uploaded Images or Videos are not populating.
+Exact Steps to Fix on Your Ubuntu VPS (1-Minute Fix)
+
+Instead of editing 10 separate .tsx files, setting baseURL in /opt/exceptionpro/frontend/src/services/api.ts to window.location.origin ('http://189.72.153.133') makes api.defaults.baseURL a non-empty string (http://189.72.153.133), which automatically fixes images and videos across the Home feed, Profile, Catalogue, Chat, and Proposals!
+
+Step 1: Update /opt/exceptionpro/frontend/src/services/api.ts on Your VPS
+
+Run this command on your VPS terminal (root@srv2160542:/opt/exceptionpro#):
+
+bash
+cd /opt/exceptionpro
+cat << 'EOF' > /opt/exceptionpro/frontend/src/services/api.ts
+import axios from 'axios';
+const api = axios.create({
+  // Localhost mode (uncomment when running locally):
+  // baseURL: 'http://localhost:9090',
+  // Hostinger VPS mode (window.location.origin = 'http://189.72.153.133'):
+  baseURL: import.meta.env.VITE_API_URL || window.location.origin,
+  headers: {
+    'Content-Type': 'application/json',
+  },
+});
+api.interceptors.request.use(
+  (config) => {
+    const token = localStorage.getItem('token');
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
+    }
+    return config;
+  },
+  (error) => {
+    return Promise.reject(error);
+  }
+);
+export default api;
+EOF
+Step 2: Verify /uploads/ Location Block Exists in frontend/nginx.conf
+
+Run this command on your VPS to make sure Nginx forwards /uploads/ requests (including large video streaming) to backend:9090:
+
+bash
+cat /opt/exceptionpro/frontend/nginx.conf
+
+Ensure it contains the location /uploads/ block:
+
+nginx
+    # Reverse proxy uploaded files (images, videos, documents) to Spring Boot backend
+    location /uploads/ {
+        proxy_pass http://backend:9090/uploads/;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header Range $http_range;
+        proxy_set_header If-Range $http_if_range;
+    }
+Step 3: Rebuild and Restart the Frontend Container on VPS
+bash
+cd /opt/exceptionpro
+docker compose up -d --build frontend
 
 
 

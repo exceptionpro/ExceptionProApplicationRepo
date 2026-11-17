@@ -349,7 +349,7 @@ public class NotificationService {
     private void syncMyPostNotifications(User user) {
         List<Post> myPosts = postRepository.findByUserIdOrderByDateCreatedDesc(user.getId());
         for (Post p : myPosts) {
-            if ("DELETED".equalsIgnoreCase(p.getStatus())) {
+            if (!"ACTIVE".equalsIgnoreCase(p.getStatus())) {
                 continue;
             }
             boolean exists = notificationRepository.existsByRecipientIdAndReferenceIdAndCategoryInAndTitle(

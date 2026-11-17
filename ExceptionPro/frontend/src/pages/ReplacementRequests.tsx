@@ -215,7 +215,21 @@ const ReplacementRequests: React.FC = () => {
     ? invoices.filter((inv) => inv.purchaseOrderId && String(inv.purchaseOrderId) === String(editPoId))
     : invoices;
 
+  const getExistingReplacementForPo = (poId: string): ReplacementRequestItem | undefined => {
+    if (!poId) return undefined;
+    const matchedPo = purchaseOrders.find((p) => String(p.id) === String(poId));
+    return requests.find(
+      (r) =>
+        (r.purchaseOrderId && String(r.purchaseOrderId) === String(poId)) ||
+        (matchedPo?.code && r.purchaseOrderCode && r.purchaseOrderCode === matchedPo.code)
+    );
+  };
+
+  const existingReplacementForSelectedPo = getExistingReplacementForPo(selectedPoId);
+  const isReadOnlyReplacementMode = Boolean(existingReplacementForSelectedPo);
+
   const handleSuffixChange = (val: string, isEdit = false) => {
+    if (!isEdit && isReadOnlyReplacementMode) return;
     const cleaned = val.replace(/\D/g, '');
     if (isEdit) {
       setEditRequestNumberSuffix(cleaned);
@@ -230,22 +244,102 @@ const ReplacementRequests: React.FC = () => {
     setSuccess('');
 
     if (!poId) {
+      const nextNum = (requests.length + 1).toString().padStart(3, '0');
+      setRequestNumberSuffix(nextNum);
+      setRequestDate(new Date().toISOString().split('T')[0]);
       setSelectedSupplierId('');
       setSelectedInvoiceId('');
       setInvoiceNumber('');
       setInvoiceAmount('');
       setCurrencyType('');
+      setDamagedQuantity('');
+      setReplacementQuantity('');
+      setReceivedStatus('Initiated');
       return;
     }
 
     const matchedPo = purchaseOrders.find((p) => String(p.id) === String(poId));
-    if (matchedPo && matchedPo.supplierId) {
-      setSelectedSupplierId(String(matchedPo.supplierId));
-    }
-
     const poInvoices = invoices.filter(
       (inv) => inv.purchaseOrderId && String(inv.purchaseOrderId) === String(poId)
     );
+    const existingReplacement = getExistingReplacementForPo(poId);
+
+    // If Replacement Request is already created for this Purchase Order, populate and display all details in read-only mode
+    if (existingReplacement) {
+      const match = existingReplacement.requestNumber.match(/RR\s*-\s*(.*)/i);
+      const suffix = match ? match[1].trim() : existingReplacement.requestNumber.replace(/\D/g, '');
+      setRequestNumberSuffix(suffix || '001');
+      setRequestDate(existingReplacement.requestDate || new Date().toISOString().split('T')[0]);
+      setSelectedSupplierId(
+        existingReplacement.receivedFromSupplierId
+          ? String(existingReplacement.receivedFromSupplierId)
+          : matchedPo?.supplierId
+            ? String(matchedPo.supplierId)
+            : ''
+      );
+
+      const matchedInv =
+        poInvoices.find(
+          (inv) =>
+            (existingReplacement.invoiceId && String(inv.id) === String(existingReplacement.invoiceId)) ||
+            (existingReplacement.invoiceNumber && inv.invoiceNumber === existingReplacement.invoiceNumber)
+        ) || poInvoices[0];
+
+      setSelectedInvoiceId(
+        existingReplacement.invoiceId
+          ? String(existingReplacement.invoiceId)
+          : matchedInv?.id
+            ? String(matchedInv.id)
+            : matchedPo?.invoiceId
+              ? String(matchedPo.invoiceId)
+              : ''
+      );
+      setInvoiceNumber(
+        existingReplacement.invoiceNumber || matchedInv?.invoiceNumber || matchedPo?.invoiceNumber || ''
+      );
+      setInvoiceAmount(
+        existingReplacement.invoiceAmount !== undefined && existingReplacement.invoiceAmount !== null
+          ? existingReplacement.invoiceAmount
+          : matchedInv?.totalAmount !== undefined && matchedInv?.totalAmount !== null
+            ? matchedInv.totalAmount
+            : matchedPo?.invoiceAmount !== undefined && matchedPo?.invoiceAmount !== null
+              ? matchedPo.invoiceAmount
+              : ''
+      );
+      setCurrencyType(
+        existingReplacement.currencyType ||
+        matchedInv?.currencyType ||
+        matchedPo?.invoiceCurrencyType ||
+        matchedPo?.currencyType ||
+        'USD'
+      );
+      setDamagedQuantity(
+        existingReplacement.damagedQuantity !== undefined && existingReplacement.damagedQuantity !== null
+          ? existingReplacement.damagedQuantity
+          : 0
+      );
+      setReplacementQuantity(
+        existingReplacement.replacementQuantity !== undefined && existingReplacement.replacementQuantity !== null
+          ? existingReplacement.replacementQuantity
+          : 0
+      );
+      setReceivedStatus(existingReplacement.receivedStatus || 'Initiated');
+      return;
+    }
+
+    // Fresh Create Mode for selected Purchase Order (no Replacement Request created yet)
+    const nextNum = (requests.length + 1).toString().padStart(3, '0');
+    setRequestNumberSuffix(nextNum);
+    setRequestDate(new Date().toISOString().split('T')[0]);
+    setDamagedQuantity('');
+    setReplacementQuantity('');
+    setReceivedStatus('Initiated');
+
+    if (matchedPo && matchedPo.supplierId) {
+      setSelectedSupplierId(String(matchedPo.supplierId));
+    } else {
+      setSelectedSupplierId('');
+    }
 
     if (poInvoices.length > 0) {
       const firstInv = poInvoices[0];
@@ -271,6 +365,7 @@ const ReplacementRequests: React.FC = () => {
   };
 
   const handleInvoiceChange = (invoiceId: string) => {
+    if (isReadOnlyReplacementMode) return;
     setSelectedInvoiceId(invoiceId);
     setError('');
 
@@ -325,6 +420,10 @@ const ReplacementRequests: React.FC = () => {
     e.preventDefault();
     setError('');
     setSuccess('');
+
+    if (isReadOnlyReplacementMode) {
+      return;
+    }
 
     if (!requestNumberSuffix.trim()) {
       setError('Please enter a Request Number.');
@@ -789,6 +888,7 @@ const ReplacementRequests: React.FC = () => {
                       type="text"
                       value={requestNumberSuffix}
                       onChange={(e) => handleSuffixChange(e.target.value)}
+                      readOnly={isReadOnlyReplacementMode}
                       placeholder="001"
                       pattern="[0-9]*"
                       style={{
@@ -796,10 +896,11 @@ const ReplacementRequests: React.FC = () => {
                         padding: '0.65rem 0.85rem',
                         borderRadius: '0 8px 8px 0',
                         border: '1px solid var(--border-color)',
-                        background: 'var(--input-bg)',
+                        background: isReadOnlyReplacementMode ? 'rgba(255, 255, 255, 0.05)' : 'var(--input-bg)',
                         color: 'var(--text-primary)',
                         fontSize: '0.9rem',
-                        outline: 'none'
+                        outline: 'none',
+                        cursor: isReadOnlyReplacementMode ? 'not-allowed' : 'text'
                       }}
                       required
                     />
@@ -817,16 +918,20 @@ const ReplacementRequests: React.FC = () => {
                   <input
                     type="date"
                     value={requestDate}
-                    onChange={(e) => setRequestDate(e.target.value)}
+                    onChange={(e) => {
+                      if (!isReadOnlyReplacementMode) setRequestDate(e.target.value);
+                    }}
+                    readOnly={isReadOnlyReplacementMode}
                     style={{
                       width: '100%',
                       padding: '0.65rem 0.85rem',
                       borderRadius: '8px',
                       border: '1px solid var(--border-color)',
-                      background: 'var(--input-bg)',
+                      background: isReadOnlyReplacementMode ? 'rgba(255, 255, 255, 0.05)' : 'var(--input-bg)',
                       color: 'var(--text-primary)',
                       fontSize: '0.9rem',
-                      outline: 'none'
+                      outline: 'none',
+                      cursor: isReadOnlyReplacementMode ? 'not-allowed' : 'text'
                     }}
                     required
                   />
@@ -871,16 +976,20 @@ const ReplacementRequests: React.FC = () => {
                   </label>
                   <select
                     value={selectedSupplierId}
-                    onChange={(e) => setSelectedSupplierId(e.target.value)}
+                    onChange={(e) => {
+                      if (!isReadOnlyReplacementMode) setSelectedSupplierId(e.target.value);
+                    }}
+                    disabled={isReadOnlyReplacementMode}
                     style={{
                       width: '100%',
                       padding: '0.65rem 0.85rem',
                       borderRadius: '8px',
                       border: '1px solid var(--border-color)',
-                      background: 'var(--input-bg)',
+                      background: isReadOnlyReplacementMode ? 'rgba(255, 255, 255, 0.05)' : 'var(--input-bg)',
                       color: 'var(--text-primary)',
                       fontSize: '0.9rem',
-                      outline: 'none'
+                      outline: 'none',
+                      cursor: isReadOnlyReplacementMode ? 'not-allowed' : 'pointer'
                     }}
                     required
                   >
@@ -904,15 +1013,17 @@ const ReplacementRequests: React.FC = () => {
                   <select
                     value={selectedInvoiceId}
                     onChange={(e) => handleInvoiceChange(e.target.value)}
+                    disabled={isReadOnlyReplacementMode}
                     style={{
                       width: '100%',
                       padding: '0.65rem 0.85rem',
                       borderRadius: '8px',
                       border: '1px solid var(--border-color)',
-                      background: 'var(--input-bg)',
+                      background: isReadOnlyReplacementMode ? 'rgba(255, 255, 255, 0.05)' : 'var(--input-bg)',
                       color: 'var(--text-primary)',
                       fontSize: '0.9rem',
-                      outline: 'none'
+                      outline: 'none',
+                      cursor: isReadOnlyReplacementMode ? 'not-allowed' : 'pointer'
                     }}
                     required
                   >
@@ -920,7 +1031,9 @@ const ReplacementRequests: React.FC = () => {
                       {selectedPoId
                         ? filteredInvoicesForSelectedPo.length > 0
                           ? '-- Select Invoice Number --'
-                          : '-- No Invoice Found for Selected PO --'
+                          : invoiceNumber
+                            ? invoiceNumber
+                            : '-- No Invoice Found for Selected PO --'
                         : '-- Select Invoice Number --'}
                     </option>
                     {filteredInvoicesForSelectedPo.map((inv) => (
@@ -1005,17 +1118,23 @@ const ReplacementRequests: React.FC = () => {
                     min="0"
                     step="1"
                     value={damagedQuantity}
-                    onChange={(e) => setDamagedQuantity(e.target.value === '' ? '' : Math.max(0, parseInt(e.target.value, 10)))}
+                    onChange={(e) => {
+                      if (!isReadOnlyReplacementMode) {
+                        setDamagedQuantity(e.target.value === '' ? '' : Math.max(0, parseInt(e.target.value, 10)));
+                      }
+                    }}
+                    readOnly={isReadOnlyReplacementMode}
                     placeholder="Enter damaged quantity"
                     style={{
                       width: '100%',
                       padding: '0.65rem 0.85rem',
                       borderRadius: '8px',
                       border: '1px solid var(--border-color)',
-                      background: 'var(--input-bg)',
+                      background: isReadOnlyReplacementMode ? 'rgba(255, 255, 255, 0.05)' : 'var(--input-bg)',
                       color: 'var(--text-primary)',
                       fontSize: '0.9rem',
-                      outline: 'none'
+                      outline: 'none',
+                      cursor: isReadOnlyReplacementMode ? 'not-allowed' : 'text'
                     }}
                     required
                   />
@@ -1031,17 +1150,23 @@ const ReplacementRequests: React.FC = () => {
                     min="0"
                     step="1"
                     value={replacementQuantity}
-                    onChange={(e) => setReplacementQuantity(e.target.value === '' ? '' : Math.max(0, parseInt(e.target.value, 10)))}
+                    onChange={(e) => {
+                      if (!isReadOnlyReplacementMode) {
+                        setReplacementQuantity(e.target.value === '' ? '' : Math.max(0, parseInt(e.target.value, 10)));
+                      }
+                    }}
+                    readOnly={isReadOnlyReplacementMode}
                     placeholder="Enter replacement quantity"
                     style={{
                       width: '100%',
                       padding: '0.65rem 0.85rem',
                       borderRadius: '8px',
                       border: '1px solid var(--border-color)',
-                      background: 'var(--input-bg)',
+                      background: isReadOnlyReplacementMode ? 'rgba(255, 255, 255, 0.05)' : 'var(--input-bg)',
                       color: 'var(--text-primary)',
                       fontSize: '0.9rem',
-                      outline: 'none'
+                      outline: 'none',
+                      cursor: isReadOnlyReplacementMode ? 'not-allowed' : 'text'
                     }}
                     required
                   />
@@ -1054,16 +1179,20 @@ const ReplacementRequests: React.FC = () => {
                   </label>
                   <select
                     value={receivedStatus}
-                    onChange={(e) => setReceivedStatus(e.target.value)}
+                    onChange={(e) => {
+                      if (!isReadOnlyReplacementMode) setReceivedStatus(e.target.value);
+                    }}
+                    disabled={isReadOnlyReplacementMode}
                     style={{
                       width: '100%',
                       padding: '0.65rem 0.85rem',
                       borderRadius: '8px',
                       border: '1px solid var(--border-color)',
-                      background: 'var(--input-bg)',
+                      background: isReadOnlyReplacementMode ? 'rgba(255, 255, 255, 0.05)' : 'var(--input-bg)',
                       color: 'var(--text-primary)',
                       fontSize: '0.9rem',
-                      outline: 'none'
+                      outline: 'none',
+                      cursor: isReadOnlyReplacementMode ? 'not-allowed' : 'pointer'
                     }}
                     required
                   >
@@ -1087,9 +1216,19 @@ const ReplacementRequests: React.FC = () => {
                 </button>
                 <button
                   type="submit"
-                  disabled={submitting}
+                  disabled={submitting || isReadOnlyReplacementMode}
+                  onClick={(e) => {
+                    if (isReadOnlyReplacementMode) {
+                      e.preventDefault();
+                      return;
+                    }
+                  }}
                   className="btn btn-primary"
-                  style={{ minWidth: '170px' }}
+                  style={{
+                    minWidth: '170px',
+                    opacity: isReadOnlyReplacementMode ? 0.6 : 1,
+                    cursor: isReadOnlyReplacementMode ? 'not-allowed' : 'pointer'
+                  }}
                 >
                   {submitting ? 'Creating...' : 'Create Replacement'}
                 </button>

@@ -66,7 +66,26 @@ public class SecurityConfig {
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
-        configuration.setAllowedOrigins(List.of("http://localhost:5173")); // Vite dev frontend URL
+
+        // ============================================================================
+        // [LOCALHOST DEVELOPMENT CONFIGURATION]
+        // Uncomment the line below (and comment out the Hostinger VPS configuration)
+        // if you want to restrict CORS strictly to the local Vite dev server:
+        // configuration.setAllowedOrigins(List.of("http://localhost:5173")); // Vite dev frontend URL
+
+        // [HOSTINGER VPS + LOCALHOST CONFIGURATION]
+        // Allows requests from both Hostinger VPS (http://189.72.153.133), local Vite
+        // dev server (http://localhost:5173), and any configured domain/origin pattern:
+        configuration.setAllowedOrigins(List.of(
+            "http://localhost:5173",
+            "http://localhost",
+            "http://189.72.153.133",
+            "http://189.72.153.133:80",
+            "http://189.72.153.133:9090"
+        ));
+        configuration.setAllowedOriginPatterns(List.of("*"));
+        // ============================================================================
+
         configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "OPTIONS"));
         configuration.setAllowedHeaders(Arrays.asList("Authorization", "Content-Type", "Cache-Control"));
         configuration.setAllowCredentials(true);

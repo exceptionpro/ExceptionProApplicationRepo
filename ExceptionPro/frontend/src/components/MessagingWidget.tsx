@@ -66,7 +66,7 @@ const MessagingWidget: React.FC = () => {
     if (!user) return;
     try {
       const res = await api.get('/api/messages/conversations');
-      const data: ConversationSummary[] = res.data || [];
+      const data: ConversationSummary[] = Array.isArray(res.data) ? res.data : [];
       setConversations(data);
 
       // Auto-open unread message thread for recipient upon login

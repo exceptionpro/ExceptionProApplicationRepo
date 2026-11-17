@@ -4,7 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import api from '../services/api';
 
 interface LeftNavigationProps {
-  activePage: 'dashboard' | 'home' | 'profile' | 'partners' | 'catalogue' | 'requisition' | 'request-notification' | 'collaboration-requisition' | 'collaboration-request-notification' | 'notifications' | 'admin' | 'invoices' | 'purchase-receipts' | 'replacement-requests' | 'reconciliation' | 'payments';
+  activePage: 'dashboard' | 'home' | 'profile' | 'partners' | 'catalogue' | 'requisition' | 'request-notification' | 'collaboration-requisition' | 'collaboration-request-notification' | 'notifications' | 'admin' | 'admin-manage-posts' | 'admin-feedback-suggestions' | 'feedback-suggestions' | 'admin-support-platform' | 'support-platform' | 'invoices' | 'purchase-receipts' | 'replacement-requests' | 'reconciliation' | 'payments';
 }
 
 const LeftNavigation: React.FC<LeftNavigationProps> = ({ activePage }) => {
@@ -40,10 +40,10 @@ const LeftNavigation: React.FC<LeftNavigationProps> = ({ activePage }) => {
   }, [user]);
 
   const accountTypeRaw = (user?.accountType || '').toLowerCase().trim();
-  const isAdmin = user?.role === 'ROLE_ADMIN';
+  const isAdmin = user?.role === 'ROLE_ADMIN' || (user?.email || '').toLowerCase().trim() === 'admin@exceptionpro.com';
 
-  const isSupplier = accountTypeRaw.includes('supplier') || accountTypeRaw === '' || isAdmin;
-  const isBuyer = accountTypeRaw.includes('buyer') || accountTypeRaw === '' || isAdmin;
+  const isSupplier = !isAdmin && (accountTypeRaw.includes('supplier') || accountTypeRaw === '');
+  const isBuyer = !isAdmin && (accountTypeRaw.includes('buyer') || accountTypeRaw === '');
 
   const handleProfileClick = () => {
     navigate('/profile');
@@ -233,20 +233,22 @@ const LeftNavigation: React.FC<LeftNavigationProps> = ({ activePage }) => {
           )}
 
           {/* Invoices: Displayed for Buyer and Supplier */}
-          <a
-            href="/invoices"
-            className={`sidebar-link ${activePage === 'invoices' ? 'active' : ''}`}
-            onClick={(e) => { e.preventDefault(); navigate('/invoices'); }}
-          >
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
-              <polyline points="14 2 14 8 20 8"></polyline>
-              <line x1="16" y1="13" x2="8" y2="13"></line>
-              <line x1="16" y1="17" x2="8" y2="17"></line>
-              <polyline points="10 9 9 9 8 9"></polyline>
-            </svg>
-            Invoices
-          </a>
+          {(isBuyer || isSupplier) && (
+            <a
+              href="/invoices"
+              className={`sidebar-link ${activePage === 'invoices' ? 'active' : ''}`}
+              onClick={(e) => { e.preventDefault(); navigate('/invoices'); }}
+            >
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                <polyline points="14 2 14 8 20 8"></polyline>
+                <line x1="16" y1="13" x2="8" y2="13"></line>
+                <line x1="16" y1="17" x2="8" y2="17"></line>
+                <polyline points="10 9 9 9 8 9"></polyline>
+              </svg>
+              Invoices
+            </a>
+          )}
 
           {/* Reconciliation: Displayed for Buyer */}
           {isBuyer && (
@@ -281,20 +283,53 @@ const LeftNavigation: React.FC<LeftNavigationProps> = ({ activePage }) => {
             </a>
           )}
 
-          {user?.role === 'ROLE_ADMIN' && (
-            <a
-              href="/admin"
-              className={`sidebar-link ${activePage === 'admin' ? 'active' : ''}`}
-              onClick={(e) => { e.preventDefault(); navigate('/admin'); }}
-            >
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <rect x="3" y="3" width="7" height="7"></rect>
-                <rect x="14" y="3" width="7" height="7"></rect>
-                <rect x="14" y="14" width="7" height="7"></rect>
-                <rect x="3" y="14" width="7" height="7"></rect>
-              </svg>
-              Admin Dashboard
-            </a>
+          {isAdmin && (
+            <>
+              <a
+                href="/admin"
+                className={`sidebar-link ${activePage === 'admin' ? 'active' : ''}`}
+                onClick={(e) => { e.preventDefault(); navigate('/admin'); }}
+              >
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <rect x="3" y="3" width="7" height="7"></rect>
+                  <rect x="14" y="3" width="7" height="7"></rect>
+                  <rect x="14" y="14" width="7" height="7"></rect>
+                  <rect x="3" y="14" width="7" height="7"></rect>
+                </svg>
+                Admin Dashboard
+              </a>
+              <a
+                href="/admin/manage-posts"
+                className={`sidebar-link ${activePage === 'admin-manage-posts' ? 'active' : ''}`}
+                onClick={(e) => { e.preventDefault(); navigate('/admin/manage-posts'); }}
+              >
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"></path>
+                  <line x1="4" y1="22" x2="4" y2="15"></line>
+                </svg>
+                Manage Posts
+              </a>
+              <a
+                href="/admin/feedback-suggestions"
+                className={`sidebar-link ${activePage === 'admin-feedback-suggestions' ? 'active' : ''}`}
+                onClick={(e) => { e.preventDefault(); navigate('/admin/feedback-suggestions'); }}
+              >
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path>
+                </svg>
+                Feedback &amp; Suggestions
+              </a>
+              <a
+                href="/admin/support-our-platform"
+                className={`sidebar-link ${activePage === 'admin-support-platform' ? 'active' : ''}`}
+                onClick={(e) => { e.preventDefault(); navigate('/admin/support-our-platform'); }}
+              >
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path>
+                </svg>
+                Support Our Platform
+              </a>
+            </>
           )}
         </div>
       </div>

@@ -33,15 +33,42 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const storedProfileComplete = localStorage.getItem('profileComplete') === 'true';
 
     if (storedToken && storedEmail && storedRole) {
-      setToken(storedToken);
-      setUser({
-        email: storedEmail,
-        role: storedRole,
-        accountType: storedAccountType === 'null' ? null : storedAccountType,
-        profileComplete: storedProfileComplete,
-      });
+      api
+        .get('/api/users/me')
+        .then((res) => {
+          if (res.data && typeof res.data === 'object' && res.data.email) {
+            setToken(storedToken);
+            setUser({
+              email: storedEmail,
+              role: storedRole,
+              accountType: storedAccountType === 'null' ? null : storedAccountType,
+              profileComplete: storedProfileComplete,
+            });
+          } else {
+            localStorage.removeItem('token');
+            localStorage.removeItem('email');
+            localStorage.removeItem('role');
+            localStorage.removeItem('accountType');
+            localStorage.removeItem('profileComplete');
+            setToken(null);
+            setUser(null);
+          }
+        })
+        .catch(() => {
+          localStorage.removeItem('token');
+          localStorage.removeItem('email');
+          localStorage.removeItem('role');
+          localStorage.removeItem('accountType');
+          localStorage.removeItem('profileComplete');
+          setToken(null);
+          setUser(null);
+        })
+        .finally(() => {
+          setLoading(false);
+        });
+    } else {
+      setLoading(false);
     }
-    setLoading(false);
   }, []);
 
   const login = (

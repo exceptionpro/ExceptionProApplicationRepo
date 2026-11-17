@@ -2,6 +2,7 @@ package com.exceptionpro.service;
 
 import com.exceptionpro.dto.PostRequest;
 import com.exceptionpro.dto.PostResponse;
+import com.exceptionpro.dto.ReportedPostResponse;
 import com.exceptionpro.entity.*;
 import com.exceptionpro.entity.Comment;
 import com.exceptionpro.repository.BusinessPartnerRequestRepository;
@@ -278,7 +279,29 @@ public class PostService {
         report.setComments(comments);
         report.setDateCreated(LocalDateTime.now());
 
-        postReportRepository.save(report);
+        PostReport savedReport = postReportRepository.save(report);
+
+        // Notify Admin users
+        try {
+            String reporterName = resolveDisplayName(user);
+            List<User> allUsers = userRepository.findAll();
+            for (User u : allUsers) {
+                if (u != null && ("ROLE_ADMIN".equalsIgnoreCase(u.getRole()) || "admin@exceptionpro.com".equalsIgnoreCase(u.getEmail()))) {
+                    String msg = reporterName + " (" + user.getEmail() + ") reported a post by " + post.getUserName() + " for reason: " + reason;
+                    notificationService.createNotification(
+                            u,
+                            user,
+                            "REPORTED_POST",
+                            "Post Reported: " + reason,
+                            msg,
+                            comments,
+                            savedReport.getId(),
+                            "POST_REPORT"
+                    );
+                }
+            }
+        } catch (Exception ignored) {
+        }
     }
 
     private String resolveDisplayName(User user) {
@@ -455,5 +478,74 @@ public class PostService {
 
         Post saved = postRepository.save(post);
         return mapToResponse(saved, user);
+    }
+
+    @Transactional(readOnly = true)
+    public List<ReportedPostResponse> getReportedPostsForAdmin() {
+        List<PostReport> reports = postReportRepository.findAllByOrderByDateCreatedDesc();
+        if (reports == null) {
+            return Collections.emptyList();
+        }
+        return reports.stream()
+                .filter(Objects::nonNull)
+                .map(this::mapReportToResponse)
+                .collect(Collectors.toList());
+    }
+
+    public void disablePostByAdmin(UUID postId) {
+        Post post = postRepository.findById(Objects.requireNonNull(postId))
+                .orElseThrow(() -> new IllegalArgumentException("Post not found"));
+        post.setStatus("DISABLED");
+        post.setLastUpdated(LocalDateTime.now());
+        postRepository.save(post);
+    }
+
+    public void deletePostByAdmin(UUID postId) {
+        Post post = postRepository.findById(Objects.requireNonNull(postId))
+                .orElseThrow(() -> new IllegalArgumentException("Post not found"));
+        post.setStatus("DELETED");
+        post.setLastUpdated(LocalDateTime.now());
+        postRepository.save(post);
+    }
+
+    private ReportedPostResponse mapReportToResponse(PostReport report) {
+        ReportedPostResponse dto = new ReportedPostResponse();
+        dto.setReportId(report.getId());
+        dto.setReason(report.getReason());
+        dto.setComments(report.getComments());
+        dto.setReportDateCreated(report.getDateCreated());
+
+        User reporter = report.getUser();
+        if (reporter != null) {
+            dto.setReportedByUserId(reporter.getId());
+            dto.setReportedByUserName(resolveDisplayName(reporter));
+            dto.setReportedByUserEmail(reporter.getEmail());
+            dto.setReportedByAccountType(reporter.getAccountType());
+        }
+
+        Post post = report.getPost();
+        if (post != null) {
+            dto.setPostId(post.getId());
+            dto.setPostAuthorName(post.getUserName());
+            dto.setPostAuthorEmail(post.getUser() != null ? post.getUser().getEmail() : "");
+            dto.setPostAccountType(post.getAccountType());
+            dto.setPostDescription(post.getPostDescription());
+            dto.setPostStatus(post.getStatus());
+            dto.setPostDateCreated(post.getDateCreated());
+
+            if (post.getAttachedMedia() != null && !post.getAttachedMedia().isBlank()) {
+                dto.setAttachedMedia(Arrays.asList(post.getAttachedMedia().split(",")));
+            } else {
+                dto.setAttachedMedia(new ArrayList<>());
+            }
+
+            if (post.getMediaThumbnails() != null && !post.getMediaThumbnails().isBlank()) {
+                dto.setMediaThumbnails(Arrays.asList(post.getMediaThumbnails().split(",")));
+            } else {
+                dto.setMediaThumbnails(new ArrayList<>());
+            }
+        }
+
+        return dto;
     }
 }

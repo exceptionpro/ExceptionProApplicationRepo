@@ -28,6 +28,11 @@ import TermsAndConditions from './pages/TermsAndConditions';
 import PrivacyPolicy from './pages/PrivacyPolicy';
 import CodeOfConduct from './pages/CodeOfConduct';
 import Disclaimer from './pages/Disclaimer';
+import FeedbackAndSuggestions from './pages/FeedbackAndSuggestions';
+import AdminFeedbackSuggestions from './pages/AdminFeedbackSuggestions';
+import SupportOurPlatform from './pages/SupportOurPlatform';
+import AdminSupportPlatform from './pages/AdminSupportPlatform';
+import AdminManagePosts from './pages/AdminManagePosts';
 
 const AppContent: React.FC = () => {
   const { user } = useAuth();
@@ -188,6 +193,43 @@ const AppContent: React.FC = () => {
         <Route path="/admin" element={
           <PrivateRoute requireAdmin={true}>
             <AdminDashboard />
+          </PrivateRoute>
+        } />
+
+        <Route path="/admin/manage-posts" element={
+          <PrivateRoute requireAdmin={true}>
+            <AdminManagePosts />
+          </PrivateRoute>
+        } />
+
+        <Route path="/admin/feedback-suggestions" element={
+          <PrivateRoute requireAdmin={true}>
+            <AdminFeedbackSuggestions />
+          </PrivateRoute>
+        } />
+
+        <Route path="/admin/support-our-platform" element={
+          <PrivateRoute requireAdmin={true}>
+            <AdminSupportPlatform />
+          </PrivateRoute>
+        } />
+
+        {/* Feedback and Suggestions Page */}
+        <Route path="/feedback-and-suggestions" element={
+          <PrivateRoute>
+            <FeedbackAndSuggestions />
+          </PrivateRoute>
+        } />
+        <Route path="/feedback-suggestions" element={
+          <PrivateRoute>
+            <FeedbackAndSuggestions />
+          </PrivateRoute>
+        } />
+
+        {/* Support Our Platform Page */}
+        <Route path="/support-our-platform" element={
+          <PrivateRoute>
+            <SupportOurPlatform />
           </PrivateRoute>
         } />
 

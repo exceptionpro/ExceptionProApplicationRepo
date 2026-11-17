@@ -67,6 +67,11 @@ public class ReplacementRequestService {
         Requisition po = requisitionRepository.findById(Objects.requireNonNull(payload.getPurchaseOrderId()))
                 .orElseThrow(() -> new IllegalArgumentException("Purchase Order not found"));
 
+        List<ReplacementRequest> existingForPo = replacementRequestRepository.findByPurchaseOrderId(po.getId());
+        if (existingForPo != null && !existingForPo.isEmpty()) {
+            throw new IllegalArgumentException("A Replacement Request has already been created for this Purchase Order. Duplicate records are not allowed.");
+        }
+
         if (payload.getReceivedFromSupplierId() == null) {
             throw new IllegalArgumentException("Received From (Supplier) is required");
         }
