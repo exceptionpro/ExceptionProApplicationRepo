@@ -10,6 +10,7 @@ import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/feedback-suggestions")
@@ -32,6 +33,21 @@ public class FeedbackSuggestionController {
             return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
         } catch (Exception e) {
             return ResponseEntity.status(500).body(Map.of("message", "Failed to submit feedback/suggestion: " + e.getMessage()));
+        }
+    }
+
+    @PutMapping("/{id}")
+    public ResponseEntity<?> updateFeedbackSuggestion(@PathVariable UUID id,
+                                                      @RequestBody FeedbackSuggestionRequest request,
+                                                      Authentication authentication) {
+        try {
+            String userEmail = authentication.getName();
+            FeedbackSuggestionResponse response = feedbackSuggestionService.updateFeedbackSuggestion(id, request, userEmail);
+            return ResponseEntity.ok(response);
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
+        } catch (Exception e) {
+            return ResponseEntity.status(500).body(Map.of("message", "Failed to update feedback/suggestion: " + e.getMessage()));
         }
     }
 

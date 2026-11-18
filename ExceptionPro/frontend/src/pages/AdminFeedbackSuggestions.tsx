@@ -5,9 +5,11 @@ import type { FeedbackSuggestionRecord } from './FeedbackAndSuggestions';
 
 const AdminFeedbackSuggestions: React.FC = () => {
   const [items, setItems] = useState<FeedbackSuggestionRecord[]>([]);
+  const [activeTab, setActiveTab] = useState<'feedback' | 'suggestions'>('feedback');
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string>('');
   const [selectedItem, setSelectedItem] = useState<FeedbackSuggestionRecord | null>(null);
+  const [selectedItemType, setSelectedItemType] = useState<'feedback' | 'suggestion'>('feedback');
   const [previewImageUrl, setPreviewImageUrl] = useState<string | null>(null);
 
   const getMediaUrl = (url?: string) => {
@@ -26,7 +28,7 @@ const AdminFeedbackSuggestions: React.FC = () => {
       setLoading(true);
       setError('');
       const res = await api.get('/api/admin/feedback-suggestions');
-      setItems(res.data || []);
+      setItems(Array.isArray(res.data) ? res.data : []);
     } catch (err: any) {
       setError(err.response?.data?.message || 'Failed to load Feedback & Suggestions.');
     } finally {
@@ -51,21 +53,29 @@ const AdminFeedbackSuggestions: React.FC = () => {
     }
   };
 
+  const feedbackItems = items.filter(
+    (item) => Boolean(item.feedbackText && item.feedbackText.trim() !== '') || item.submissionType === 'Feedback'
+  );
+
+  const suggestionItems = items.filter(
+    (item) => Boolean(item.suggestionText && item.suggestionText.trim() !== '') || item.submissionType === 'Suggestion'
+  );
+
   return (
     <div className="feed-layout-container" style={{ maxWidth: '1400px', width: '100%' }}>
       {/* Left Sidebar */}
       <LeftNavigation activePage="admin-feedback-suggestions" />
 
       {/* Main Content */}
-      <div className="feed-center-column" style={{ flex: 1, maxWidth: '1150px', width: '100%' }}>
+      <div className="feed-center-column" style={{ flex: 1, maxWidth: '100%', width: '100%' }}>
         <div className="glass-card glass-card-lg" style={{ width: '100%', maxWidth: 'none' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem', marginBottom: '0.5rem' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem', marginBottom: '1rem' }}>
             <div>
               <h2 className="card-title" style={{ marginBottom: '0.25rem' }}>
                 Feedback &amp; Suggestions
               </h2>
               <p className="card-subtitle" style={{ margin: 0 }}>
-                All user-submitted Feedbacks and Suggestions / Defects across the platform
+                Review all user-submitted Feedbacks and Suggestions across the platform
               </p>
             </div>
             <button
@@ -78,122 +88,396 @@ const AdminFeedbackSuggestions: React.FC = () => {
             </button>
           </div>
 
-          {error && <div className="alert-error" style={{ marginTop: '1rem' }}>{error}</div>}
+          {/* Two Section Tabs: a) Feedback | b) Suggestions */}
+          <nav className="policy-nav-tabs" aria-label="Admin Feedback and Suggestions sections" style={{ marginBottom: '1.5rem' }}>
+            <button
+              type="button"
+              className={`policy-nav-tab ${activeTab === 'feedback' ? 'active' : ''}`}
+              onClick={() => setActiveTab('feedback')}
+              style={{ cursor: 'pointer', border: 'none', background: activeTab === 'feedback' ? undefined : 'transparent' }}
+            >
+              Feedback ({feedbackItems.length})
+            </button>
+            <button
+              type="button"
+              className={`policy-nav-tab ${activeTab === 'suggestions' ? 'active' : ''}`}
+              onClick={() => setActiveTab('suggestions')}
+              style={{ cursor: 'pointer', border: 'none', background: activeTab === 'suggestions' ? undefined : 'transparent' }}
+            >
+              Suggestions ({suggestionItems.length})
+            </button>
+          </nav>
+
+          {error && <div className="alert-error" style={{ marginBottom: '1rem' }}>{error}</div>}
 
           {loading ? (
             <div style={{ textAlign: 'center', padding: '2rem' }}>Loading Feedback &amp; Suggestions...</div>
-          ) : (
-            <div className="data-table-container" style={{ marginTop: '1.25rem' }}>
-              <table className="data-table">
-                <thead>
-                  <tr>
-                    <th>#</th>
-                    <th>Profile / Organization</th>
-                    <th>Email Address</th>
-                    <th>Account Type</th>
-                    <th>Type</th>
-                    <th>Feedback</th>
-                    <th>Suggestions (Detailed Steps)</th>
-                    <th>Screenshot</th>
-                    <th>Submitted Date</th>
-                    <th>Action</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {items.map((item, index) => (
-                    <tr key={item.id}>
-                      <td>{index + 1}</td>
-                      <td style={{ fontWeight: 600 }}>{item.userName || 'N/A'}</td>
-                      <td>{item.userEmail}</td>
-                      <td>
-                        <span className={getAccountBadgeClass(item.accountType)}>
-                          {item.accountType || 'Member'}
-                        </span>
-                      </td>
-                      <td>
-                        <span
-                          className="badge"
+          ) : activeTab === 'feedback' ? (
+            /* =================================================================
+               a) FEEDBACK SECTION — CARD-BASED LAYOUT
+               ================================================================= */
+            <div>
+              <h3 style={{ fontSize: '1.15rem', marginBottom: '1rem', color: 'var(--text-primary)' }}>
+                Submitted Feedbacks ({feedbackItems.length})
+              </h3>
+
+              {feedbackItems.length === 0 ? (
+                <div
+                  style={{
+                    textAlign: 'center',
+                    padding: '2.5rem 1rem',
+                    color: 'var(--text-muted)',
+                    background: 'var(--bg-secondary)',
+                    border: '1px solid var(--border-color)',
+                    borderRadius: '12px',
+                  }}
+                >
+                  No Feedbacks have been submitted yet.
+                </div>
+              ) : (
+                <div
+                  style={{
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '1.25rem',
+                    width: '100%',
+                  }}
+                >
+                  {feedbackItems.map((item, index) => (
+                    <div
+                      key={item.id}
+                      style={{
+                        width: '100%',
+                        background: 'var(--bg-secondary)',
+                        border: '1px solid var(--border-color)',
+                        borderRadius: '12px',
+                        padding: '1.35rem',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        justifyContent: 'space-between',
+                        gap: '1rem',
+                        boxShadow: 'var(--shadow-sm)',
+                      }}
+                    >
+                      <div>
+                        {/* Card Top Header */}
+                        <div
                           style={{
-                            background:
-                              item.submissionType === 'Feedback'
-                                ? 'rgba(99, 102, 241, 0.15)'
-                                : item.submissionType === 'Suggestion'
-                                  ? 'rgba(16, 185, 129, 0.15)'
-                                  : 'rgba(245, 158, 11, 0.15)',
-                            color:
-                              item.submissionType === 'Feedback'
-                                ? 'var(--accent-primary, #6366f1)'
-                                : item.submissionType === 'Suggestion'
-                                  ? '#10b981'
-                                  : '#f59e0b',
-                            padding: '0.25rem 0.6rem',
-                            borderRadius: '4px',
-                            fontWeight: 600,
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            alignItems: 'center',
+                            gap: '0.5rem',
+                            flexWrap: 'wrap',
+                            borderBottom: '1px solid var(--border-color)',
+                            paddingBottom: '0.75rem',
+                            marginBottom: '0.85rem',
                           }}
                         >
-                          {item.submissionType}
-                        </span>
-                      </td>
-                      <td style={{ maxWidth: '240px', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
-                        {item.feedbackText || '—'}
-                      </td>
-                      <td style={{ maxWidth: '280px', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
-                        {item.suggestionText || '—'}
-                      </td>
-                      <td>
-                        {item.screenshotUrl ? (
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                            <img
-                              src={getMediaUrl(item.screenshotUrl)}
-                              alt={item.screenshotFileName || 'Screenshot'}
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+                            <span
                               style={{
-                                width: '44px',
-                                height: '44px',
-                                objectFit: 'cover',
-                                borderRadius: '6px',
-                                border: '1px solid var(--border-color)',
-                                cursor: 'pointer',
+                                fontSize: '0.78rem',
+                                fontWeight: 700,
+                                color: 'var(--text-muted)',
                               }}
-                              onClick={() => setPreviewImageUrl(getMediaUrl(item.screenshotUrl))}
-                              title="Click to view screenshot"
-                            />
-                            <button
-                              type="button"
-                              className="btn btn-secondary"
-                              style={{ padding: '0.2rem 0.5rem', fontSize: '0.75rem', width: 'auto', margin: 0 }}
-                              onClick={() => setPreviewImageUrl(getMediaUrl(item.screenshotUrl))}
                             >
-                              View Image
-                            </button>
+                              #{index + 1}
+                            </span>
+                            <span
+                              className="badge"
+                              style={{
+                                background: 'rgba(99, 102, 241, 0.15)',
+                                color: 'var(--accent-primary, #6366f1)',
+                                padding: '0.2rem 0.55rem',
+                                borderRadius: '4px',
+                                fontWeight: 600,
+                                fontSize: '0.78rem',
+                              }}
+                            >
+                              Feedback
+                            </span>
+                            <span className={getAccountBadgeClass(item.accountType)}>
+                              {item.accountType || 'Member'}
+                            </span>
                           </div>
-                        ) : (
-                          <span style={{ color: 'var(--text-muted)' }}>No Image</span>
-                        )}
-                      </td>
-                      <td style={{ whiteSpace: 'nowrap', fontSize: '0.85rem' }}>
-                        {item.createdAt ? new Date(item.createdAt).toLocaleString() : '—'}
-                      </td>
-                      <td>
+                          <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>
+                            {item.createdAt ? new Date(item.createdAt).toLocaleString() : '—'}
+                          </span>
+                        </div>
+
+                        {/* Submitter Profile / Organization & Email */}
+                        <div style={{ marginBottom: '0.85rem' }}>
+                          <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginBottom: '0.15rem' }}>
+                            Submitted By
+                          </div>
+                          <div style={{ fontWeight: 700, color: 'var(--text-primary)', fontSize: '1rem' }}>
+                            {item.userName || 'N/A'}
+                          </div>
+                          <div style={{ fontSize: '0.84rem', color: 'var(--text-secondary)', wordBreak: 'break-all' }}>
+                            {item.userEmail}
+                          </div>
+                        </div>
+
+                        {/* Feedback Content */}
+                        <div>
+                          <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', fontWeight: 600, marginBottom: '0.35rem' }}>
+                            Feedback Message
+                          </div>
+                          <div
+                            style={{
+                              background: 'var(--glass-bg)',
+                              border: '1px solid var(--border-color)',
+                              borderRadius: '8px',
+                              padding: '0.85rem',
+                              color: 'var(--text-primary)',
+                              fontSize: '0.9rem',
+                              lineHeight: 1.55,
+                              whiteSpace: 'pre-wrap',
+                              wordBreak: 'break-word',
+                            }}
+                          >
+                            {item.feedbackText || '—'}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Card Footer Action */}
+                      <div
+                        style={{
+                          display: 'flex',
+                          justifyContent: 'flex-end',
+                          borderTop: '1px solid var(--border-color)',
+                          paddingTop: '0.75rem',
+                        }}
+                      >
                         <button
                           type="button"
                           className="nav-btn"
-                          style={{ padding: '0.25rem 0.75rem', fontSize: '0.82rem', whiteSpace: 'nowrap' }}
-                          onClick={() => setSelectedItem(item)}
+                          style={{ padding: '0.35rem 0.9rem', fontSize: '0.82rem' }}
+                          onClick={() => {
+                            setSelectedItem(item);
+                            setSelectedItemType('feedback');
+                          }}
                         >
                           View Details
                         </button>
-                      </td>
-                    </tr>
+                      </div>
+                    </div>
                   ))}
-                  {items.length === 0 && (
-                    <tr>
-                      <td colSpan={10} style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted)' }}>
-                        No Feedbacks or Suggestions have been submitted yet.
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
+                </div>
+              )}
+            </div>
+          ) : (
+            /* =================================================================
+               b) SUGGESTIONS SECTION — CARD-BASED LAYOUT
+               ================================================================= */
+            <div>
+              <h3 style={{ fontSize: '1.15rem', marginBottom: '1rem', color: 'var(--text-primary)' }}>
+                Submitted Suggestions ({suggestionItems.length})
+              </h3>
+
+              {suggestionItems.length === 0 ? (
+                <div
+                  style={{
+                    textAlign: 'center',
+                    padding: '2.5rem 1rem',
+                    color: 'var(--text-muted)',
+                    background: 'var(--bg-secondary)',
+                    border: '1px solid var(--border-color)',
+                    borderRadius: '12px',
+                  }}
+                >
+                  No Suggestions have been submitted yet.
+                </div>
+              ) : (
+                <div
+                  style={{
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '1.25rem',
+                    width: '100%',
+                  }}
+                >
+                  {suggestionItems.map((item, index) => (
+                    <div
+                      key={item.id}
+                      style={{
+                        width: '100%',
+                        background: 'var(--bg-secondary)',
+                        border: '1px solid var(--border-color)',
+                        borderRadius: '12px',
+                        padding: '1.35rem',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        justifyContent: 'space-between',
+                        gap: '1rem',
+                        boxShadow: 'var(--shadow-sm)',
+                      }}
+                    >
+                      <div>
+                        {/* Card Top Header */}
+                        <div
+                          style={{
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            alignItems: 'center',
+                            gap: '0.5rem',
+                            flexWrap: 'wrap',
+                            borderBottom: '1px solid var(--border-color)',
+                            paddingBottom: '0.75rem',
+                            marginBottom: '0.85rem',
+                          }}
+                        >
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+                            <span
+                              style={{
+                                fontSize: '0.78rem',
+                                fontWeight: 700,
+                                color: 'var(--text-muted)',
+                              }}
+                            >
+                              #{index + 1}
+                            </span>
+                            <span
+                              className="badge"
+                              style={{
+                                background: 'rgba(16, 185, 129, 0.15)',
+                                color: '#10b981',
+                                padding: '0.2rem 0.55rem',
+                                borderRadius: '4px',
+                                fontWeight: 600,
+                                fontSize: '0.78rem',
+                              }}
+                            >
+                              Suggestion
+                            </span>
+                            <span className={getAccountBadgeClass(item.accountType)}>
+                              {item.accountType || 'Member'}
+                            </span>
+                          </div>
+                          <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>
+                            {item.createdAt ? new Date(item.createdAt).toLocaleString() : '—'}
+                          </span>
+                        </div>
+
+                        {/* Submitter Profile / Organization & Email */}
+                        <div style={{ marginBottom: '0.85rem' }}>
+                          <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginBottom: '0.15rem' }}>
+                            Submitted By
+                          </div>
+                          <div style={{ fontWeight: 700, color: 'var(--text-primary)', fontSize: '1rem' }}>
+                            {item.userName || 'N/A'}
+                          </div>
+                          <div style={{ fontSize: '0.84rem', color: 'var(--text-secondary)', wordBreak: 'break-all' }}>
+                            {item.userEmail}
+                          </div>
+                        </div>
+
+                        {/* Suggestions / Detailed Steps Content */}
+                        <div style={{ marginBottom: item.screenshotUrl ? '0.85rem' : 0 }}>
+                          <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', fontWeight: 600, marginBottom: '0.35rem' }}>
+                            Suggestions (Detailed Steps)
+                          </div>
+                          <div
+                            style={{
+                              background: 'var(--glass-bg)',
+                              border: '1px solid var(--border-color)',
+                              borderRadius: '8px',
+                              padding: '0.85rem',
+                              color: 'var(--text-primary)',
+                              fontSize: '0.9rem',
+                              lineHeight: 1.55,
+                              whiteSpace: 'pre-wrap',
+                              wordBreak: 'break-word',
+                            }}
+                          >
+                            {item.suggestionText || '—'}
+                          </div>
+                        </div>
+
+                        {/* Optional Attached Screenshot */}
+                        {item.screenshotUrl && (
+                          <div>
+                            <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', fontWeight: 600, marginBottom: '0.35rem' }}>
+                              Attached Screenshot
+                            </div>
+                            <div
+                              style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '0.75rem',
+                                background: 'var(--glass-bg)',
+                                border: '1px solid var(--border-color)',
+                                borderRadius: '8px',
+                                padding: '0.6rem',
+                              }}
+                            >
+                              <img
+                                src={getMediaUrl(item.screenshotUrl)}
+                                alt={item.screenshotFileName || 'Screenshot'}
+                                style={{
+                                  width: '64px',
+                                  height: '64px',
+                                  objectFit: 'cover',
+                                  borderRadius: '6px',
+                                  border: '1px solid var(--border-color)',
+                                  cursor: 'pointer',
+                                }}
+                                onClick={() => setPreviewImageUrl(getMediaUrl(item.screenshotUrl))}
+                                title="Click to view screenshot"
+                              />
+                              <div style={{ flex: 1, minWidth: 0 }}>
+                                <div
+                                  style={{
+                                    fontSize: '0.8rem',
+                                    color: 'var(--text-secondary)',
+                                    overflow: 'hidden',
+                                    textOverflow: 'ellipsis',
+                                    whiteSpace: 'nowrap',
+                                    marginBottom: '0.35rem',
+                                  }}
+                                >
+                                  {item.screenshotFileName || 'Screenshot Image'}
+                                </div>
+                                <button
+                                  type="button"
+                                  className="btn btn-secondary"
+                                  style={{ padding: '0.25rem 0.65rem', fontSize: '0.75rem', width: 'auto', margin: 0 }}
+                                  onClick={() => setPreviewImageUrl(getMediaUrl(item.screenshotUrl))}
+                                >
+                                  View Image
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Card Footer Action */}
+                      <div
+                        style={{
+                          display: 'flex',
+                          justifyContent: 'flex-end',
+                          borderTop: '1px solid var(--border-color)',
+                          paddingTop: '0.75rem',
+                        }}
+                      >
+                        <button
+                          type="button"
+                          className="nav-btn"
+                          style={{ padding: '0.35rem 0.9rem', fontSize: '0.82rem' }}
+                          onClick={() => {
+                            setSelectedItem(item);
+                            setSelectedItemType('suggestion');
+                          }}
+                        >
+                          View Details
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -218,7 +502,7 @@ const AdminFeedbackSuggestions: React.FC = () => {
                 paddingBottom: '0.75rem',
               }}
             >
-              Feedback &amp; Suggestion Details
+              {selectedItemType === 'feedback' ? 'Feedback Details' : 'Suggestion Details'}
             </h3>
 
             <div
@@ -255,59 +539,63 @@ const AdminFeedbackSuggestions: React.FC = () => {
                 </div>
               </div>
 
-              <div style={{ borderTop: '1px solid var(--border-color)', paddingTop: '1rem' }}>
-                <strong style={{ color: 'var(--text-secondary)', display: 'block', marginBottom: '0.35rem' }}>
-                  a) Feedback:
-                </strong>
-                <div
-                  style={{
-                    background: 'var(--bg-secondary)',
-                    padding: '0.85rem',
-                    borderRadius: '8px',
-                    border: '1px solid var(--border-color)',
-                    whiteSpace: 'pre-wrap',
-                  }}
-                >
-                  {selectedItem.feedbackText || 'No feedback text provided.'}
-                </div>
-              </div>
-
-              <div>
-                <strong style={{ color: 'var(--text-secondary)', display: 'block', marginBottom: '0.35rem' }}>
-                  b) Suggestions / Detailed Steps:
-                </strong>
-                <div
-                  style={{
-                    background: 'var(--bg-secondary)',
-                    padding: '0.85rem',
-                    borderRadius: '8px',
-                    border: '1px solid var(--border-color)',
-                    whiteSpace: 'pre-wrap',
-                  }}
-                >
-                  {selectedItem.suggestionText || 'No suggestion / defect steps provided.'}
-                </div>
-              </div>
-
-              {selectedItem.screenshotUrl && (
-                <div>
-                  <strong style={{ color: 'var(--text-secondary)', display: 'block', marginBottom: '0.45rem' }}>
-                    Attached Screenshot ({selectedItem.screenshotFileName || 'Image'}):
+              {selectedItemType === 'feedback' ? (
+                <div style={{ borderTop: '1px solid var(--border-color)', paddingTop: '1rem' }}>
+                  <strong style={{ color: 'var(--text-secondary)', display: 'block', marginBottom: '0.35rem' }}>
+                    Feedback:
                   </strong>
-                  <img
-                    src={getMediaUrl(selectedItem.screenshotUrl)}
-                    alt={selectedItem.screenshotFileName || 'Screenshot'}
+                  <div
                     style={{
-                      maxWidth: '100%',
-                      maxHeight: '360px',
+                      background: 'var(--bg-secondary)',
+                      padding: '0.85rem',
                       borderRadius: '8px',
-                      objectFit: 'contain',
                       border: '1px solid var(--border-color)',
-                      cursor: 'pointer',
+                      whiteSpace: 'pre-wrap',
                     }}
-                    onClick={() => setPreviewImageUrl(getMediaUrl(selectedItem.screenshotUrl))}
-                  />
+                  >
+                    {selectedItem.feedbackText || 'No feedback text provided.'}
+                  </div>
                 </div>
+              ) : (
+                <>
+                  <div style={{ borderTop: '1px solid var(--border-color)', paddingTop: '1rem' }}>
+                    <strong style={{ color: 'var(--text-secondary)', display: 'block', marginBottom: '0.35rem' }}>
+                      Suggestions / Detailed Steps:
+                    </strong>
+                    <div
+                      style={{
+                        background: 'var(--bg-secondary)',
+                        padding: '0.85rem',
+                        borderRadius: '8px',
+                        border: '1px solid var(--border-color)',
+                        whiteSpace: 'pre-wrap',
+                      }}
+                    >
+                      {selectedItem.suggestionText || 'No suggestion / defect steps provided.'}
+                    </div>
+                  </div>
+
+                  {selectedItem.screenshotUrl && (
+                    <div>
+                      <strong style={{ color: 'var(--text-secondary)', display: 'block', marginBottom: '0.45rem' }}>
+                        Attached Screenshot ({selectedItem.screenshotFileName || 'Image'}):
+                      </strong>
+                      <img
+                        src={getMediaUrl(selectedItem.screenshotUrl)}
+                        alt={selectedItem.screenshotFileName || 'Screenshot'}
+                        style={{
+                          maxWidth: '100%',
+                          maxHeight: '360px',
+                          borderRadius: '8px',
+                          objectFit: 'contain',
+                          border: '1px solid var(--border-color)',
+                          cursor: 'pointer',
+                        }}
+                        onClick={() => setPreviewImageUrl(getMediaUrl(selectedItem.screenshotUrl))}
+                      />
+                    </div>
+                  )}
+                </>
               )}
             </div>
           </div>

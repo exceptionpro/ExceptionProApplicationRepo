@@ -838,20 +838,17 @@ const Profile: React.FC = () => {
     setCoverPhoto(data.coverPhoto || '');
     setProfilePicture(data.profilePicture || '');
     setAbout(data.about || '');
-    if (data.accountType === 'Individual') {
-      setFirstName(data.firstName || '');
-      setLastName(data.lastName || '');
-      setDob(data.dob || '');
-      setGender(data.gender || 'Male');
-    } else {
-      setOrganizationName(data.organizationName || '');
-      setLegalName(data.legalName || '');
-      setStreetAddress(data.streetAddress || '');
-      setCity(data.city || '');
-      setPincode(data.pincode || '');
-      setState(data.state || '');
-      setCountry(data.country || 'India');
-    }
+    setFirstName(data.firstName || '');
+    setLastName(data.lastName || '');
+    setDob(data.dob || '');
+    setGender(data.gender || 'Male');
+    setOrganizationName(data.organizationName || '');
+    setLegalName(data.legalName || '');
+    setStreetAddress(data.streetAddress || '');
+    setCity(data.city || '');
+    setPincode(data.pincode || '');
+    setState(data.state || '');
+    setCountry(data.country || 'India');
   };
 
   const fetchMyPartners = async () => {
@@ -1024,7 +1021,9 @@ const Profile: React.FC = () => {
 
     const payload: any = {};
 
-    if (profile?.accountType === 'Individual') {
+    const isPersonalProfile = Boolean(profile && profile.firstName && !profile.organizationName);
+
+    if (isPersonalProfile) {
       if (!firstName || !lastName || !dob || !gender) {
         setError('Please fill in all personal details.');
         return;
@@ -1123,7 +1122,7 @@ const Profile: React.FC = () => {
 
         // Save immediately
         const payload: any = {};
-        if (profile?.accountType === 'Individual') {
+        if (Boolean(profile && profile.firstName && !profile.organizationName)) {
           payload.firstName = firstName || profile.firstName || '';
           payload.lastName = lastName || profile.lastName || '';
           payload.dob = dob || profile.dob || '';
@@ -1157,7 +1156,7 @@ const Profile: React.FC = () => {
     try {
       setCoverPhoto('');
       const payload: any = {};
-      if (profile?.accountType === 'Individual') {
+      if (Boolean(profile && profile.firstName && !profile.organizationName)) {
         payload.firstName = firstName || profile.firstName || '';
         payload.lastName = lastName || profile.lastName || '';
         payload.dob = dob || profile.dob || '';
@@ -1189,7 +1188,7 @@ const Profile: React.FC = () => {
     try {
       setProfilePicture('');
       const payload: any = {};
-      if (profile?.accountType === 'Individual') {
+      if (Boolean(profile && profile.firstName && !profile.organizationName)) {
         payload.firstName = firstName || profile.firstName || '';
         payload.lastName = lastName || profile.lastName || '';
         payload.dob = dob || profile.dob || '';
@@ -1224,7 +1223,7 @@ const Profile: React.FC = () => {
     }
     try {
       const payload: any = {};
-      if (profile?.accountType === 'Individual') {
+      if (Boolean(profile && profile.firstName && !profile.organizationName)) {
         payload.firstName = firstName || profile.firstName || '';
         payload.lastName = lastName || profile.lastName || '';
         payload.dob = dob || profile.dob || '';
@@ -1259,7 +1258,7 @@ const Profile: React.FC = () => {
     setSuccess(null);
     try {
       const payload: any = {};
-      if (profile?.accountType === 'Individual') {
+      if (Boolean(profile && profile.firstName && !profile.organizationName)) {
         payload.firstName = firstName || profile.firstName || '';
         payload.lastName = lastName || profile.lastName || '';
         payload.dob = dob || profile.dob || '';
@@ -1296,12 +1295,33 @@ const Profile: React.FC = () => {
   }
 
   return (
-    <div className="feed-layout-container">
-      {/* Left Sidebar */}
-      <LeftNavigation activePage={activeTab === 'partners' || isOtherProfile ? 'partners' : 'profile'} />
+    <div className={activeTab === 'profile' ? 'policy-page-wrapper' : 'feed-layout-container'}>
+      {/* Left Sidebar — only shown in Business Partners view */}
+      {activeTab !== 'profile' && (
+        <LeftNavigation activePage={activeTab === 'partners' || isOtherProfile ? 'partners' : 'profile'} />
+      )}
 
       {/* Profile Details Column */}
-      <div className="feed-center-column" style={{ maxWidth: '800px' }}>
+      <div
+        className={activeTab === 'profile' ? 'policy-container' : 'feed-center-column'}
+        style={activeTab === 'profile' ? { maxWidth: '900px', width: '100%' } : { maxWidth: '800px' }}
+      >
+        {activeTab === 'profile' && (
+          <div className="policy-top-bar" style={{ marginBottom: '1rem' }}>
+            <button
+              type="button"
+              className="policy-back-btn"
+              onClick={() => navigate(-1)}
+              aria-label="Go back"
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <line x1="19" y1="12" x2="5" y2="12"></line>
+                <polyline points="12 19 5 12 12 5"></polyline>
+              </svg>
+              <span>Back</span>
+            </button>
+          </div>
+        )}
         {activeTab === 'profile' ? (
           <>
             <div className="glass-card glass-card-lg" style={{ width: '100%', maxWidth: 'none' }}>
@@ -1555,7 +1575,11 @@ const Profile: React.FC = () => {
                       <div className="user-profile-field-content">
                         <span className="user-profile-field-label">Account Classification</span>
                         <span className="user-profile-classification-badge">
-                          {profile.accountType || 'Member'}
+                          {profile.role === 'ROLE_ADMIN' || profile.email?.toLowerCase() === 'admin@exceptionpro.com'
+                            ? 'Admin'
+                            : profile.accountType === 'Individual'
+                              ? 'Buyer'
+                              : profile.accountType || 'Buyer'}
                         </span>
                       </div>
                     </div>
@@ -1564,7 +1588,7 @@ const Profile: React.FC = () => {
                   <div className="separator" style={{ margin: '0.25rem 0' }}>Profile Details</div>
 
                   <div className="user-profile-details-card">
-                    {profile.accountType === 'Individual' ? (
+                    {profile.firstName && !profile.organizationName ? (
                       <div className="user-profile-details-grid">
                         <div className="user-profile-field-card">
                           <div className="user-profile-field-icon">
@@ -1734,14 +1758,26 @@ const Profile: React.FC = () => {
 
                     <div className="form-group half-width">
                       <label className="form-label">Account Classification</label>
-                      <input type="text" className="form-input" value={profile.accountType} disabled style={{ opacity: 0.6 }} />
+                      <input
+                        type="text"
+                        className="form-input"
+                        value={
+                          profile.role === 'ROLE_ADMIN' || profile.email?.toLowerCase() === 'admin@exceptionpro.com'
+                            ? 'Admin'
+                            : profile.accountType === 'Individual'
+                              ? 'Buyer'
+                              : profile.accountType
+                        }
+                        disabled
+                        style={{ opacity: 0.6 }}
+                      />
                     </div>
                   </div>
 
                   <div className="separator" style={{ margin: '1rem 0 1.5rem 0' }}>Profile Details</div>
 
-                  {/* Individual view/edit logic */}
-                  {profile.accountType === 'Individual' && (
+                  {/* Personal view/edit logic (Google Sign-In or Admin) */}
+                  {Boolean(profile.firstName && !profile.organizationName) && (
                     <div>
                       <div className="form-row">
                         <div className="form-group half-width">
@@ -1798,7 +1834,7 @@ const Profile: React.FC = () => {
                   )}
 
                   {/* Corporate view/edit logic */}
-                  {profile.accountType !== 'Individual' && (
+                  {!Boolean(profile.firstName && !profile.organizationName) && (
                     <div>
                       <div className="form-row">
                         <div className="form-group half-width">

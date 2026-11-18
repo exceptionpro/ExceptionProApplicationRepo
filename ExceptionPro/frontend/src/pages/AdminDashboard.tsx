@@ -43,9 +43,19 @@ const AdminDashboard: React.FC = () => {
     fetchUsers();
   }, []);
 
+  const resolveAccountType = (u: UserRecord) => {
+    if (u.role === 'ROLE_ADMIN' || (u.email || '').toLowerCase().trim() === 'admin@exceptionpro.com') {
+      return 'Admin';
+    }
+    if (!u.accountType || u.accountType.toLowerCase() === 'individual') {
+      return 'Buyer';
+    }
+    return u.accountType;
+  };
+
   const getAccountBadgeClass = (type: string) => {
     switch (type) {
-      case 'Individual': return 'badge badge-individual';
+      case 'Admin': return 'badge badge-individual';
       case 'Buyer': return 'badge badge-buyer';
       case 'Supplier': return 'badge badge-supplier';
       default: return 'badge badge-hybrid';
@@ -81,32 +91,37 @@ const AdminDashboard: React.FC = () => {
                 </tr>
               </thead>
               <tbody>
-                {users.map((u) => (
-                  <tr key={u.id}>
-                    <td>
-                      {u.accountType === 'Individual'
-                        ? `${u.firstName} ${u.lastName}`
-                        : u.organizationName || 'N/A'}
-                    </td>
-                    <td>{u.email}</td>
-                    <td>
-                      <span className={getAccountBadgeClass(u.accountType)}>
-                        {u.accountType || 'Unassigned'}
-                      </span>
-                    </td>
-                    <td>{u.role}</td>
-                    <td>
-                      <button
-                        type="button"
-                        className="nav-btn"
-                        style={{ padding: '0.25rem 0.75rem', fontSize: '0.85rem' }}
-                        onClick={() => setSelectedUser(u)}
-                      >
-                        View Details
-                      </button>
-                    </td>
-                  </tr>
-                ))}
+                {users.map((u) => {
+                  const accType = resolveAccountType(u);
+                  return (
+                    <tr key={u.id}>
+                      <td>
+                        {u.organizationName
+                          ? u.organizationName
+                          : u.firstName
+                            ? `${u.firstName} ${u.lastName || ''}`.trim()
+                            : 'N/A'}
+                      </td>
+                      <td>{u.email}</td>
+                      <td>
+                        <span className={getAccountBadgeClass(accType)}>
+                          {accType}
+                        </span>
+                      </td>
+                      <td>{u.role}</td>
+                      <td>
+                        <button
+                          type="button"
+                          className="nav-btn"
+                          style={{ padding: '0.25rem 0.75rem', fontSize: '0.85rem' }}
+                          onClick={() => setSelectedUser(u)}
+                        >
+                          View Details
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
                 {users.length === 0 && (
                   <tr>
                     <td colSpan={5} style={{ textAlign: 'center', padding: '2rem' }}>No users registered on the platform.</td>
@@ -141,14 +156,14 @@ const AdminDashboard: React.FC = () => {
               <div>
                 <strong style={{ color: 'var(--text-secondary)' }}>Account Classification:</strong>
                 <p>
-                  <span className={getAccountBadgeClass(selectedUser.accountType)}>
-                    {selectedUser.accountType || 'Unassigned'}
+                  <span className={getAccountBadgeClass(resolveAccountType(selectedUser))}>
+                    {resolveAccountType(selectedUser)}
                   </span>
                 </p>
               </div>
 
               <div style={{ borderTop: '1px solid var(--border-color)', padding: '1rem 0', marginTop: '0.5rem' }}>
-                {selectedUser.accountType === 'Individual' ? (
+                {selectedUser.firstName && !selectedUser.organizationName ? (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginTop: '0.5rem' }}>
                     <p><strong>First Name:</strong> {selectedUser.firstName}</p>
                     <p><strong>Last Name:</strong> {selectedUser.lastName}</p>

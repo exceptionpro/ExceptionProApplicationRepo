@@ -32,6 +32,10 @@ public class FeedbackSuggestionService {
     }
 
     public FeedbackSuggestionResponse submitFeedbackSuggestion(FeedbackSuggestionRequest request, String userEmail) {
+        if (request.getId() != null) {
+            return updateFeedbackSuggestion(request.getId(), request, userEmail);
+        }
+
         User user = userRepository.findByEmailFetchProfiles(userEmail)
                 .orElseGet(() -> userRepository.findByEmail(userEmail)
                         .orElseThrow(() -> new IllegalArgumentException("User not found")));
@@ -100,6 +104,58 @@ public class FeedbackSuggestionService {
         }
 
         return mapToResponse(saved);
+    }
+
+    public FeedbackSuggestionResponse updateFeedbackSuggestion(UUID id, FeedbackSuggestionRequest request, String userEmail) {
+        User user = userRepository.findByEmail(userEmail)
+                .orElseThrow(() -> new IllegalArgumentException("User not found"));
+
+        FeedbackSuggestion entity = feedbackSuggestionRepository.findById(java.util.Objects.requireNonNull(id))
+                .orElseThrow(() -> new IllegalArgumentException("Feedback / Suggestion record not found"));
+
+        if (entity.getUser() != null && !entity.getUser().getId().equals(user.getId())) {
+            throw new IllegalArgumentException("You are not authorized to edit this record.");
+        }
+
+        String feedbackText = request.getFeedbackText() != null ? request.getFeedbackText().trim() : "";
+        String suggestionText = request.getSuggestionText() != null ? request.getSuggestionText().trim() : "";
+
+        if ("Feedback".equalsIgnoreCase(entity.getSubmissionType())) {
+            if (feedbackText.isEmpty()) {
+                throw new IllegalArgumentException("Please enter your Feedback before saving.");
+            }
+            entity.setFeedbackText(feedbackText);
+        } else if ("Suggestion".equalsIgnoreCase(entity.getSubmissionType())) {
+            if (suggestionText.isEmpty()) {
+                throw new IllegalArgumentException("Please enter Detailed steps in the Suggestions section before saving.");
+            }
+            entity.setSuggestionText(suggestionText);
+            if (request.getScreenshotUrl() != null) {
+                String url = request.getScreenshotUrl().trim();
+                entity.setScreenshotUrl(url.isEmpty() ? null : url);
+            }
+            if (request.getScreenshotFileName() != null) {
+                String fname = request.getScreenshotFileName().trim();
+                entity.setScreenshotFileName(fname.isEmpty() ? null : fname);
+            }
+        } else {
+            if (feedbackText.isEmpty() && suggestionText.isEmpty()) {
+                throw new IllegalArgumentException("Please enter Feedback or Suggestions / Detailed steps before saving.");
+            }
+            entity.setFeedbackText(feedbackText.isEmpty() ? null : feedbackText);
+            entity.setSuggestionText(suggestionText.isEmpty() ? null : suggestionText);
+            if (request.getScreenshotUrl() != null) {
+                String url = request.getScreenshotUrl().trim();
+                entity.setScreenshotUrl(url.isEmpty() ? null : url);
+            }
+            if (request.getScreenshotFileName() != null) {
+                String fname = request.getScreenshotFileName().trim();
+                entity.setScreenshotFileName(fname.isEmpty() ? null : fname);
+            }
+        }
+
+        FeedbackSuggestion updated = feedbackSuggestionRepository.save(entity);
+        return mapToResponse(updated);
     }
 
     @Transactional(readOnly = true)

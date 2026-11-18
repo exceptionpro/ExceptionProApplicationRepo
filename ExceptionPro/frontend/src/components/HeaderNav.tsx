@@ -102,8 +102,14 @@ const HeaderNav: React.FC = () => {
     ? `${profileData.firstName} ${profileData.lastName}`
     : (profileData?.organizationName || user?.email || '');
 
-  const organizationNameDisplay = profileData?.organizationName?.trim() || 'N/A';
-  const accountTypeDisplay = profileData?.accountType || user?.accountType || (user?.role === 'ROLE_ADMIN' ? 'Admin' : 'Member');
+  const organizationNameDisplay = profileData?.organizationName?.trim() || (profileData?.firstName ? `${profileData.firstName} ${profileData.lastName || ''}`.trim() : 'N/A');
+  const isUserAdmin = user?.role === 'ROLE_ADMIN' || (user?.email || '').toLowerCase().trim() === 'admin@exceptionpro.com';
+  const rawAccountType = profileData?.accountType || user?.accountType || '';
+  const accountTypeDisplay = isUserAdmin
+    ? 'Admin'
+    : rawAccountType.toLowerCase() === 'individual'
+      ? 'Buyer'
+      : rawAccountType || 'Buyer';
   const userInitial = (user?.email || '').trim().charAt(0).toUpperCase() || 'U';
 
   const isHomeActive = location.pathname === '/feed' || location.pathname === '/';

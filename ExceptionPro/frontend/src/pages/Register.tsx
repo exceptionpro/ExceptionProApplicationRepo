@@ -3,18 +3,18 @@ import { useNavigate, Link } from 'react-router-dom';
 import api from '../services/api';
 
 const countries = [
-  'India', 'United States', 'United Kingdom', 'Canada', 'Australia', 
+  'India', 'United States', 'United Kingdom', 'Canada', 'Australia',
   'Germany', 'France', 'Japan', 'China', 'Singapore', 'United Arab Emirates'
 ];
 
 const Register: React.FC = () => {
   const navigate = useNavigate();
-  
-  const [accountType, setAccountType] = useState('Individual');
+
+  const [accountType, setAccountType] = useState('Buyer');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [retypePassword, setRetypePassword] = useState('');
-  
+
   // Individual fields
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
@@ -113,7 +113,6 @@ const Register: React.FC = () => {
                 value={accountType}
                 onChange={(e) => setAccountType(e.target.value)}
               >
-                <option value="Individual">Individual</option>
                 <option value="Buyer">Buyer</option>
                 <option value="Supplier">Supplier</option>
               </select>
